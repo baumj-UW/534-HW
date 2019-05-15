@@ -99,7 +99,7 @@ plt.annotate("MPP=%d W  Vmpp=%.1f V  Impp=%.2f A" % (np.max(Pm),Vmpp,Impp),(Vmpp
 plt.show()
 
 
-## Part D
+## Part D ## plot for whole array
 irrad_arr = np.array([1, 3/4, 1/2, 0.1]) * ig_stc
 
 id_arr = np.zeros((len(irrad_arr),len(vm_arr)))
