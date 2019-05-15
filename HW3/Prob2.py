@@ -37,20 +37,31 @@ err = 1e-8
 vt = Nc*Kb/qe*Tk*eta
 
 
-def PVModel(t,x):  #x is an array of state variables [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
+def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,):  #x is an array of state variables [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
     
     #Zdq = integrator states = "Ceff voltages"
     #Zdc = integrator state in PI
+    
+    ## state variables
     i_d, i_q, z_d, z_q, v2dc, Zdc, thetaHat_g, Zpll = x #this should work...
 #     i_q = x[1]
 #     z_d = x[2]
 #     z_q = x[3]
     
-    
+    ## algebraic eqns ###
     iref_d, iref_q = ## solve for iref_dq w/ newton raphson at each time step. I think these are from prob 1. convert to dq
     vt_d = z_d + (iref_d - i_d)*Kp - L*wg_hat*i_q + v_d ## not sure about this
+    
+    ##PV module eqns##
+    
+    im = 
+    k1 = Rsh*(vm+Rs*ig)/(Rs+Rsh)
+        id_arr[j,i], im_arr[j,i] = NewtonsMethod(g,id_0,err)
+        
+    Pin = np.sqrt(v2dc)*im*Np
     #, vt_q = ## find from new i_dq
     
+    ## differential equations ##
     dId_dt = (1/L)*(vt_d - i_d*Rac - v_d + L*wg_hat*i_q) #vt_d and vd are different...?
     dIq_dt = (1/L)*(vt_q - i_q*Rac - v_q - L*wg_hat*i_d) #vt_q and vq are different...?
     
@@ -58,7 +69,7 @@ def PVModel(t,x):  #x is an array of state variables [id, iq, Zd, Zq, Vdc^2, Zdc
     dZq_dt = Ki_*(iref_q - i_q) # Ki from which controller?
     
     dV2dc_dt = (2/C)*(Pin - (2/3)*(vt_d*i_d + vt_q*i_q)) 
-    dZdc_dt = Kdc_*(v2dc - v2dc_ref) #v2dc ref from pv newton ??
+    dZdc_dt = Kdc_*(v2dc - vref_dc**2) #vref_dc from pv newton * Ns 
     
     dxdt[6] = wg_hat # = Zpll +  Kpll~ *v_q # d(thetag_hat)/dt
     dxdt[7] = Kpll*v_q # d(Zpll)/dt  not sure where vq comes from...
@@ -121,8 +132,8 @@ Np = np.round(Pmax_array/(Ns*np.max(Pm)))
 
 ### Part A ###
 ## compute equilibrium values for all states between 2V<vdc<=Voc
-V_dc = np.linspace(2*Vpk,Voc)
-V_m = V_dc/Ns
+Vref_dc = np.linspace(2*Vpk,Voc*Ns) #Vdc,ref of array  --> part B will pick this based on Vmpp
+Vref_m = Vref_dc/Ns #might not be necessary
 
 
 
