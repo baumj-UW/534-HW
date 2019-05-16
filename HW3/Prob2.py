@@ -32,14 +32,16 @@ Vpk = np.sqrt(2/3)*480 # peak line-neutral voltage in V
 L = 690e-6 #averaged model inductance (from HW2)
 Rac = 6e-3 #averaged model resistance (from HW2)
 C = 19.25e-3
-Kdc_p = (C/2)*2*np.pi*10 
-Kdc_i = (C/2)*(2*np.pi*10)**2
+Hc = C/2
+Kdc_p = Hc*2*np.pi*10 
+Kdc_i = Hc*(2*np.pi*10)**2
 #Kdc_Hc = C/2
-Ki_pll = (2*np.pi*500)**2 
-Kp_pll = 2*2*np.pi*500
-Kpll_Hpll = 1/(np.sqrt(2/3)*480)
-Kp_ff = 0.1
-Ki_ff = 0.75
+Hpll = 1/Vpk
+Ki_pll = Hpll*(2*np.pi*500)**2 
+Kp_pll = Hpll*2*2*np.pi*500  ### mult by Hpll
+#Kpll_Hpll = 1/Vpk
+Kp_cc = 0.1
+Ki_cc = 0.75
 
 err = 1e-8
 
@@ -51,7 +53,7 @@ STEP1 = 5*T
 STEP2 = 10*T
 STEP3 = 15*T
 STEP4 = 20*T
-
+SUB_INT = 500 ## number of subintervals for timesteps
 
 def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,ipv_d):  #x is an array of state variables [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
     
@@ -80,20 +82,20 @@ def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,ipv_d):  #x is an array of state var
     Qref = 0
     #Pout #AC output from inv
     #Pmpp # I think this can happen outside the diff eqn
-    #iref_d, iref_q = (2/3)/(v_d**2 + v_q**2)*np.matmul([[v_d,v_q],[v_q,-v_d]],[[Pref],[Qref]])#1, 0## solve for iref_dq w/ newton raphson at each time step. I think these are from prob 1. convert to dq
-    iref_d = (2/(3*v_d))*(Pref)  ## from lect 9 notes, use above line for full eqn..
-    iref_q =0
+    iref_d, iref_q = (2/3)/(v_d**2 + v_q**2)*np.matmul([[v_d,v_q],[v_q,-v_d]],[[Pref],[Qref]])#1, 0## solve for iref_dq w/ newton raphson at each time step. I think these are from prob 1. convert to dq
+    #iref_d = (2/(3*v_d))*(Pref)  ## from lect 9 notes, use above line for full eqn..
+    #iref_q =0
     
     wg_hat = Zpll +  Ki_pll*v_q 
-    vt_d = z_d + (iref_d - i_d)*Kp_ff - L*wg_hat*i_q + v_d ## not sure about this --> control voltage input to AC side
-    vt_q = z_q + (iref_q - i_q)*Kp_ff + L*wg_hat*i_d + v_q
+    vt_d = z_d + (iref_d - i_d)*Kp_cc - L*wg_hat*i_q + v_d ## not sure about this --> control voltage input to AC side
+    vt_q = z_q + (iref_q - i_q)*Kp_cc + L*wg_hat*i_d + v_q
     
     ## differential equations ##
     dId_dt = (1/L)*(vt_d - i_d*Rac - v_d + L*wg_hat*i_q) #vt_d and vd are different...?
     dIq_dt = (1/L)*(vt_q - i_q*Rac - v_q - L*wg_hat*i_d) #vt_q and vq are different...?
     
-    dZd_dt = Ki_ff*(iref_d - i_d) # Ki from which controller?
-    dZq_dt = Ki_ff*(iref_q - i_q) # Ki from which controller?
+    dZd_dt = Ki_cc*(iref_d - i_d) # Ki from which controller?
+    dZq_dt = Ki_cc*(iref_q - i_q) # Ki from which controller?
     
     dV2dc_dt = (2/C)*(Pin - (3/2)*(vt_d*i_d + vt_q*i_q)) 
     dZdc_dt = Kdc_i*(v2dc - vref_dc**2) #vref_dc from pv newton * Ns 
@@ -164,41 +166,57 @@ Vref_m = Vref_dc/Ns #might not be necessary
 
 ipv_d = id_arr[-1,np.argmax(Pm)] ## initial pv diode current for NR; based on ig_stc equilib.
 
+results = [0,0,0,0]
 initPV = np.zeros((4,8))  # initial conditions for 4 simulation changes [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
 initPV[0,:] = [1.6986e3, 0, 1.2740, 0, 1.7073e6, -3.246e3, 0, 377]
-eval_times = np.linspace(0,STEP1,round(STEP1/1e-4))
+eval_times = np.array([np.linspace(0,STEP1,SUB_INT),\
+                       np.linspace(STEP1,STEP2,SUB_INT),\
+                       np.linspace(STEP2,STEP3,SUB_INT),\
+                       np.linspace(STEP3,STEP4,SUB_INT)]) 
 Vref_dc_init = Vmpp_array
-#solve response during fault time 0 to fault clear
-ANSWERS = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, ig, Rsh, Rs,ipv_d),\
-                    [0,STEP1],initPV[0,:],t_eval=eval_times) #use default eval times to start   
+#Solve ODE for each eval time  ## need to calc input steps with NR 
+results[0] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, ig, Rsh, Rs,ipv_d),\
+                    [0,STEP1],initPV[0,:],t_eval=eval_times[0]) #use default eval times to start   
 
-print(ANSWERS)
+results[1] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, ig, Rsh, Rs,ipv_d),\
+                    [STEP1,STEP2],results[0].y[:,-1],t_eval=eval_times[1])
+
+results[2] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, ig, Rsh, Rs,ipv_d),\
+                    [STEP2,STEP3],results[1].y[:,-1],t_eval=eval_times[2])
+
+results[3] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, ig, Rsh, Rs,ipv_d),\
+                    [STEP3,STEP4],results[2].y[:,-1],t_eval=eval_times[3])
+
 
 ## Solution complete! Plot all results
 
 # Combine solution results to plot
-sim_times = ANSWERS.t#np.concatenate((fault_sol.t,postf_sol.t))
-#[id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll] = ANSWERS.y[:] 
+sim_times = results[0].t#np.concatenate((fault_sol.t,postf_sol.t))
+#[id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll] = results[0].y[:] 
 ## plots
 ## Vdc, Vdcref
 ## Id, Iq
 ## P and Pref
 ## Q and Qref?
 ##   Mod(pll angle, 2pi), mod(grid angle, 2pi)  
+
 Vdc_figs = plt.figure(1)
-plt.plot(sim_times,np.sqrt(ANSWERS.y[4]),label='Vdc')
+for res in results:
+    plt.plot(res.t,np.sqrt(res.y[4]),label='Vdc',color='b')
 plt.grid(True)
 plt.xlabel('Time (sec)')
 plt.ylabel('DC-Link Voltage (V)')
-plt.legend()
+plt.legend(('Vdc',))
+
 
 idq_figs = plt.figure(2)
-plt.plot(sim_times,ANSWERS.y[0],label='id')
-plt.plot(sim_times,ANSWERS.y[1],label='iq')
+for res in results:
+    plt.plot(res.t,res.y[0],label='id',color='b')
+    plt.plot(res.t,res.y[1],label='iq',color='r')
 plt.grid(True)
 plt.xlabel('Time (sec)')
 plt.ylabel('AC-Side Current-dq')
-plt.legend()
+plt.legend(('id','iq'))
 
 plt.show()
 
