@@ -66,21 +66,26 @@ def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,ipv_d):  #x is an array of state var
 #     z_q = x[3]
     
     ## algebraic eqns ###
-    iref_d, iref_q = 1, 0## solve for iref_dq w/ newton raphson at each time step. I think these are from prob 1. convert to dq
-   
     v_d = Vpk ## more accurate using cos(theta-theta) blah
     v_q = 0 
+    
+   
+    
     wg_hat = Zpll +  Ki_pll*v_q 
     vt_d = z_d + (iref_d - i_d)*Kp_ff - L*wg_hat*i_q + v_d ## not sure about this --> control voltage input to AC side
     vt_q = z_q + (iref_q - i_q)*Kp_ff + L*wg_hat*i_d + v_q
     
     ##PV module eqns##
-    vm = np.sqrt(v2dc)/Ns ## CHECK IF Vdc SHOULD BE Vdc_REF...?
+    vm = np.sqrt(v2dc)/Ns ## CHECK IF Vdc SHOULD BE Vdc_REF...? NO
     k1 = Rsh*(vm+Rs*ig)/(Rs+Rsh)
     ipv_d, im = NewtonsMethod(g, ipv_d, err) #returns im from NR function; g is updated with globals at this point
   
     Pin = np.sqrt(v2dc)*im*Np
-    #, vt_q = ## find from new i_dq
+    Pref = Zdc + Kdc_p*(v2dc - vref_dc**2) + Pin
+    Qref = 0
+    
+    iref_d, iref_q = (2/3)/(v_d**2 + v_q**2)*np.matmul([[v_d,v_q],[v_q,-v_d]],[[Pref],[Qref]])#1, 0## solve for iref_dq w/ newton raphson at each time step. I think these are from prob 1. convert to dq
+
     
     ## differential equations ##
     dId_dt = (1/L)*(vt_d - i_d*Rac - v_d + L*wg_hat*i_q) #vt_d and vd are different...?
@@ -159,11 +164,11 @@ Vref_m = Vref_dc/Ns #might not be necessary
 ipv_d = id_arr[-1,np.argmax(Pm)] ## initial pv diode current for NR; based on ig_stc equilib.
 
 initPV = np.zeros((4,8))  # initial conditions for 4 simulation changes [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
+initPV[0,:] = [1.6986e3, 0, 1.2740, 0, 1.7073e6, -3.246e3, 0, 377]
 eval_times = np.linspace(0,STEP1,round(T/100))
 Vref_dc_init = Vmpp_array
 #solve response during fault time 0 to fault clear
 ANSWERS = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, ig, Rsh, Rs,ipv_d),\
-                    [0,STEP1],initPV[0,:],\
-                    t_eval=eval_times) #check eval time....   
+                    [0,STEP1],initPV[0,:],t_eval=eval_times) #check eval time....   
                 
 print("working?")
