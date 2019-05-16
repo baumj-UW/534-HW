@@ -32,9 +32,9 @@ Vpk = np.sqrt(2/3)*480 # peak line-neutral voltage in V
 L = 690e-6 #averaged model inductance (from HW2)
 Rac = 6e-3 #averaged model resistance (from HW2)
 C = 19.25e-3
-Kdc_p = 2*np.pi*10 
-Kdc_i = (2*np.pi*10)**2
-Kdc_Hc = 19.25e-3/2
+Kdc_p = (C/2)*2*np.pi*10 
+Kdc_i = (C/2)*(2*np.pi*10)**2
+#Kdc_Hc = C/2
 Ki_pll = (2*np.pi*500)**2 
 Kp_pll = 2*2*np.pi*500
 Kpll_Hpll = 1/(np.sqrt(2/3)*480)
@@ -49,6 +49,8 @@ vt = Nc*Kb/qe*Tk*eta
 T = 1/60 #period 
 STEP1 = 5*T
 STEP2 = 10*T
+STEP3 = 15*T
+STEP4 = 20*T
 
 
 def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,ipv_d):  #x is an array of state variables [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
@@ -72,14 +74,15 @@ def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,ipv_d):  #x is an array of state var
     ##PV module eqns## --> vm and k1 can move into newtons method
     vm = np.sqrt(v2dc)/Ns 
     k1 = Rsh*(vm+Rs*ig)/(Rs+Rsh)
-    ipv_d, im = NewtonsMethod(g, ipv_d, err) #returns im from NR function; g is updated with globals at this point
+    ipv_d, im = NewtonsMethod(g, 0, err) #returns im from NR function; g is updated with globals at this point
     Pin = np.sqrt(v2dc)*im*Np 
     Pref = Zdc + Kdc_p*(v2dc - vref_dc**2) + Pin
     Qref = 0
     #Pout #AC output from inv
     #Pmpp # I think this can happen outside the diff eqn
-    iref_d, iref_q = (2/3)/(v_d**2 + v_q**2)*np.matmul([[v_d,v_q],[v_q,-v_d]],[[Pref],[Qref]])#1, 0## solve for iref_dq w/ newton raphson at each time step. I think these are from prob 1. convert to dq
-
+    #iref_d, iref_q = (2/3)/(v_d**2 + v_q**2)*np.matmul([[v_d,v_q],[v_q,-v_d]],[[Pref],[Qref]])#1, 0## solve for iref_dq w/ newton raphson at each time step. I think these are from prob 1. convert to dq
+    iref_d = (2/(3*v_d))*(Pref)  ## from lect 9 notes, use above line for full eqn..
+    iref_q =0
     
     wg_hat = Zpll +  Ki_pll*v_q 
     vt_d = z_d + (iref_d - i_d)*Kp_ff - L*wg_hat*i_q + v_d ## not sure about this --> control voltage input to AC side
@@ -92,7 +95,7 @@ def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,ipv_d):  #x is an array of state var
     dZd_dt = Ki_ff*(iref_d - i_d) # Ki from which controller?
     dZq_dt = Ki_ff*(iref_q - i_q) # Ki from which controller?
     
-    dV2dc_dt = (2/C)*(Pin - (2/3)*(vt_d*i_d + vt_q*i_q)) 
+    dV2dc_dt = (2/C)*(Pin - (3/2)*(vt_d*i_d + vt_q*i_q)) 
     dZdc_dt = Kdc_i*(v2dc - vref_dc**2) #vref_dc from pv newton * Ns 
     
    # dxdt[6] = wg_hat # = Zpll +  Kpll~ *v_q # d(thetag_hat)/dt
@@ -163,10 +166,52 @@ ipv_d = id_arr[-1,np.argmax(Pm)] ## initial pv diode current for NR; based on ig
 
 initPV = np.zeros((4,8))  # initial conditions for 4 simulation changes [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
 initPV[0,:] = [1.6986e3, 0, 1.2740, 0, 1.7073e6, -3.246e3, 0, 377]
-eval_times = np.linspace(0,STEP1,100)
+eval_times = np.linspace(0,STEP1,round(STEP1/1e-4))
 Vref_dc_init = Vmpp_array
 #solve response during fault time 0 to fault clear
 ANSWERS = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, ig, Rsh, Rs,ipv_d),\
-                    [0,STEP1],initPV[0,:],t_eval=None) #use default eval times to start   
-                
+                    [0,STEP1],initPV[0,:],t_eval=eval_times) #use default eval times to start   
+
+print(ANSWERS)
+
+## Solution complete! Plot all results
+
+# Combine solution results to plot
+sim_times = ANSWERS.t#np.concatenate((fault_sol.t,postf_sol.t))
+#[id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll] = ANSWERS.y[:] 
+## plots
+## Vdc, Vdcref
+## Id, Iq
+## P and Pref
+## Q and Qref?
+##   Mod(pll angle, 2pi), mod(grid angle, 2pi)  
+Vdc_figs = plt.figure(1)
+plt.plot(sim_times,np.sqrt(ANSWERS.y[4]),label='Vdc')
+plt.grid(True)
+plt.xlabel('Time (sec)')
+plt.ylabel('DC-Link Voltage (V)')
+plt.legend()
+
+idq_figs = plt.figure(2)
+plt.plot(sim_times,ANSWERS.y[0],label='id')
+plt.plot(sim_times,ANSWERS.y[1],label='iq')
+plt.grid(True)
+plt.xlabel('Time (sec)')
+plt.ylabel('AC-Side Current-dq')
+plt.legend()
+
+plt.show()
+
+# results = np.zeros((4*NGEN,len(sim_times))) #array of results [speed;delta;E'q;E'd]
+# 
+# speedFig = plt.figure(1) #rotor speed plot
+# for omega in range(NGEN):
+#     results[omega,:] = np.concatenate((fault_sol.y[omega,:],
+#                                        postf_sol.y[omega,:]),axis=0)
+#     plt.plot(sim_times,(results[omega,:]+W_S)/W_S,
+#              label='Gen '+str(omega+1))    
+# plt.xlabel('Time (sec)')
+# plt.ylabel('Rotor Speed (pu)')
+# plt.legend()
+# plt.grid(True)                
 print("working?")
