@@ -55,7 +55,7 @@ STEP3 = 15*T
 STEP4 = 20*T
 SUB_INT = 500 ## number of subintervals for timesteps
 
-def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,ipv_d):  #x is an array of state variables [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
+def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,id_0,Qref):  #x is an array of state variables [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
     
     #i_dq = dq current grid side of inv
     #v_dq = dq voltage on grid side of inv
@@ -76,10 +76,10 @@ def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,ipv_d):  #x is an array of state var
     ##PV module eqns## --> vm and k1 can move into newtons method
     vm = np.sqrt(v2dc)/Ns 
     k1 = Rsh*(vm+Rs*ig)/(Rs+Rsh)
-    ipv_d, im = NewtonsMethod(g, 0, err) #returns im from NR function; g is updated with globals at this point
+    ipv_d, im = NewtonsMethod(g, id_0, err) #returns im from NR function; g is updated with globals at this point
     Pin = np.sqrt(v2dc)*im*Np 
     Pref = Zdc + Kdc_p*(v2dc - vref_dc**2) + Pin
-    Qref = 0
+    #Qref = 0
     #Pout #AC output from inv
     #Pmpp # I think this can happen outside the diff eqn
     iref_d, iref_q = (2/3)/(v_d**2 + v_q**2)*np.matmul([[v_d,v_q],[v_q,-v_d]],[[Pref],[Qref]])#1, 0## solve for iref_dq w/ newton raphson at each time step. I think these are from prob 1. convert to dq
@@ -153,17 +153,6 @@ for (j,ig) in enumerate(irrad_arr):
     Impp[j] = im_arr[j,np.argmax(Pm[j])]
     Isc[j] = np.max(im_arr[j,:])
     Voc[j] = V_m[np.argmin(np.abs(im_arr[j,:]))]
-    
-# def getPVratings(ig):
-#     
-#     return 
-
-## calculations based on ig=ig_stc FIX THIS!!! --> dont need
-# Pm = np.multiply(V_m,im_arr[-1,:])
-# Vmpp = V_m[np.argmax(Pm)]
-# Impp = im_arr[-1,np.argmax(Pm)]
-# Isc = np.max(im_arr[-1,:])
-# Voc = V_m[np.argmin(np.abs(im_arr[-1,:]))]
 
 Ns = np.ceil(Vmpp_array/Vmpp[0]) ## choose Ns and Np based on ig=ig_stc
 Np = np.round(Pmax_array/(Ns*np.max(Pm[0])))
@@ -172,10 +161,11 @@ Np = np.round(Pmax_array/(Ns*np.max(Pm[0])))
 
 ### Part A ###
 ## compute equilibrium values for all states between 2V<vdc<=Voc
-Vref_dc = np.linspace(2*Vpk,Voc*Ns) #Vdc,ref of array  --> part B will pick this based on Vmpp
-Vref_m = Vref_dc/Ns #might not be necessary
-
-ipv_d = id_arr[-1,np.argmax(Pm)] ## initial pv diode current for NR; based on ig_stc equilib.
+#Vref_dc = np.linspace(2*Vpk,Voc*Ns) #Vdc,ref of array  --> part B will pick this based on Vmpp
+#Vref_m = Vref_dc/Ns #might not be necessary
+Vref_dc = Vmpp*Ns ## array of ref Vdc corresponding to all simulation igs
+Qref_sim = [0, 0, 200e3, 200e3]
+ipv_d = id_0 # id_arr[-1,np.argmax(Pm)] ## initial pv diode current for NR; based on ig_stc equilib. --> maybe update to be "id_mpp" from iv curve
 
 results = [0,0,0,0]
 initPV = np.zeros((4,8))  # initial conditions for 4 simulation changes [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
@@ -184,22 +174,22 @@ eval_times = np.array([np.linspace(0,STEP1,SUB_INT),\
                        np.linspace(STEP1,STEP2,SUB_INT),\
                        np.linspace(STEP2,STEP3,SUB_INT),\
                        np.linspace(STEP3,STEP4,SUB_INT)]) 
-Vref_dc_init = Vmpp_array
+#Vref_dc_init = Vmpp_array
 #Solve ODE for each eval time  ## need to calc input steps with NR 
-results[0] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, irrad_arr[0], Rsh, Rs,ipv_d),\
+results[0] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[0], Ns, Np, irrad_arr[0], Rsh, Rs,ipv_d,Qref_sim[0]),\
                     [0,STEP1],initPV[0,:],t_eval=eval_times[0]) #ipv_d maybe not necessary   
 
 #Vref_dc_init = #solve for new Vmpp
-results[1] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, irrad_arr[1], Rsh, Rs,ipv_d),\
+results[1] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[1], Ns, Np, irrad_arr[1], Rsh, Rs,ipv_d,Qref_sim[1]),\
                     [STEP1,STEP2],results[0].y[:,-1],t_eval=eval_times[1])
 
 
 #Vref_dc_init = #solve for new Vmpp
-results[2] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, irrad_arr[2], Rsh, Rs,ipv_d),\
+results[2] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[2], Ns, Np, irrad_arr[2], Rsh, Rs,ipv_d,Qref_sim[2]),\
                     [STEP2,STEP3],results[1].y[:,-1],t_eval=eval_times[2])
 
 #Vref_dc_init = #solve for new Vmpp
-results[3] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, irrad_arr[3], Rsh, Rs,ipv_d),\
+results[3] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[3], Ns, Np, irrad_arr[3], Rsh, Rs,ipv_d,Qref_sim[3]),\
                     [STEP3,STEP4],results[2].y[:,-1],t_eval=eval_times[3])
 
 
@@ -217,6 +207,7 @@ sim_times = results[0].t#np.concatenate((fault_sol.t,postf_sol.t))
 
 Vdc_figs = plt.figure(1)
 for res in results:
+    
     plt.plot(res.t,np.sqrt(res.y[4]),label='Vdc',color='b')
 plt.grid(True)
 plt.xlabel('Time (sec)')
