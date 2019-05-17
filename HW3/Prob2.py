@@ -70,34 +70,33 @@ def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,k2,id_0,Qref):  #x is an array of st
  
     ##PV module eqns## 
     Pin = PVin(np.sqrt(v2dc), ig, id_0, Ns, Np, Rsh, Rs, k2, i0)
+    
+    # Current Controller reference
     Pref = CalcPref(Zdc, v2dc, vref_dc, Pin, Kdc_p)
-
-    iref_d, iref_q = (2/3)/(v_d**2 + v_q**2)*np.matmul([[v_d,v_q],[v_q,-v_d]],[[Pref],[Qref]])## solve for iref_dq w/ newton raphson at each time step. I think these are from prob 1. convert to dq
-    #iref_d = (2/(3*v_d))*(Pref)  ## from lect 9 notes, use above line for full eqn..
-    #iref_q =0
+    iref_d, iref_q = (2/3)/(v_d**2 + v_q**2)*np.matmul([[v_d,v_q],[v_q,-v_d]],[[Pref],[Qref]])
     
     wg_hat = Zpll +  Ki_pll*v_q 
-    vt_d = z_d + (iref_d - i_d)*Kp_cc - L*wg_hat*i_q + v_d ## not sure about this --> control voltage input to AC side
+    vt_d = z_d + (iref_d - i_d)*Kp_cc - L*wg_hat*i_q + v_d ## control voltage input to AC side
     vt_q = z_q + (iref_q - i_q)*Kp_cc + L*wg_hat*i_d + v_q
     
     ## differential equations ##
-    dId_dt = (1/L)*(vt_d - i_d*Rac - v_d + L*wg_hat*i_q) #vt_d and vd are different...?
-    dIq_dt = (1/L)*(vt_q - i_q*Rac - v_q - L*wg_hat*i_d) #vt_q and vq are different...?
+    dId_dt = (1/L)*(vt_d - i_d*Rac - v_d + L*wg_hat*i_q) 
+    dIq_dt = (1/L)*(vt_q - i_q*Rac - v_q - L*wg_hat*i_d) 
     
-    dZd_dt = Ki_cc*(iref_d - i_d) # Ki from which controller?
-    dZq_dt = Ki_cc*(iref_q - i_q) # Ki from which controller?
+    dZd_dt = Ki_cc*(iref_d - i_d) 
+    dZq_dt = Ki_cc*(iref_q - i_q) 
     
     dV2dc_dt = (2/C)*(Pin - (3/2)*(vt_d*i_d + vt_q*i_q)) 
-    dZdc_dt = Kdc_i*(v2dc - vref_dc**2) #vref_dc from pv newton * Ns 
+    dZdc_dt = Kdc_i*(v2dc - vref_dc**2)  
     
-   # dxdt[6] = wg_hat # = Zpll +  Kpll~ *v_q # d(thetag_hat)/dt
-    #dxdt[7] = Kp_pll*v_q # d(Zpll)/dt  not sure where vq comes from...
+    #dxdt[6] = wg_hat # = Zpll +  Kpll~ *v_q # d(thetag_hat)/dt
+    #dxdt[7] = Kp_pll*v_q # d(Zpll)/dt 
     
-    dxdt = [dId_dt, dIq_dt, dZd_dt, dZq_dt, dV2dc_dt, dZdc_dt, wg_hat, Ki_pll*v_q] #  np.array("derivs of x") #the derivatives of the state eqns
+    dxdt = [dId_dt, dIq_dt, dZd_dt, dZq_dt, dV2dc_dt, dZdc_dt, wg_hat, Ki_pll*v_q] ##the derivatives of the state eqns
     return dxdt
 
 def PVin(vdc,ig,id_0,Ns,Np,Rsh,Rs,k2,i0):
-     ##PV module eqns## 
+    ##PV module eqns## 
     vm = vdc/Ns 
     k1 = Rsh*(vm+Rs*ig)/(Rs+Rsh)
     ipv_d, im = NewtonsMethod(g, id_0,ig,k1,k2,i0,Rsh) #returns im from NR function; 
@@ -126,14 +125,14 @@ def NewtonsMethod(g, x, ig, k1, k2, i0, Rsh, tol=err):
     im = ig-x-(k1-k2*x)/Rsh    
     return x, im
 
-def Idq_PQac(i_d,i_q,v_d=Vpk,v_q=0): #Return AC P, Q; assume v_dq constant
+def Idq_PQac(i_d,i_q,v_d=Vpk,v_q=0): #Return AC P, Q; default v_dq constant
     Vdq = [[v_d,v_q],[v_q,-v_d]]
     return (3/2)*np.matmul(Vdq,[[i_d],[i_q]])
 
 
 ## compute equilibrium  to initialize model
 #init condit
-id_0 = 0  #FIGURE OUT VARIABLE SETUP
+id_0 = 0  
 
 V_m = np.linspace(0,90,100) #vector of module voltages
    
@@ -142,8 +141,6 @@ irrad_arr = np.array([1, 1/2, 1/2, 1/4]) * ig_stc #array of insolation current f
 
 id_arr = np.zeros((len(irrad_arr),len(V_m)))
 im_arr = np.zeros((len(irrad_arr),len(V_m)))
-
-
 
 Pm = [None]*len(irrad_arr)
 Vmpp = np.zeros(irrad_arr.shape)
@@ -170,12 +167,11 @@ Np = np.round(Pmax_array/(Ns*np.max(Pm[0])))
 
 
 Vref_dc = Vmpp*Ns ## array of ref Vdc corresponding to all simulation igs
-Qref_sim = [0, 0, 200e3, 200e3]
-ipv_d = id_0 # id_arr[-1,np.argmax(Pm)] ## initial pv diode current for NR; based on ig_stc equilib. --> maybe update to be "id_mpp" from iv curve
+Qref_sim = [0, 0, 200e3, 200e3] #Q input control for simulation steps
 
 results = [None]*4
 initPV = np.zeros((4,8))  # initial conditions for 4 simulation changes [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
-initPV[0,:] = [1.6986e3, 0, 1.2740, 0, 1.7073e6, -3.246e3, 0, 2*np.pi*60]
+initPV[0,:] = [1.6986e3, 0, 1.2740, 0, Vref_dc[0]**2, -3.246e3, 0, 2*np.pi*60]
 eval_times = np.array([np.linspace(0,STEP1,SUB_INT),\
                        np.linspace(STEP1,STEP2,SUB_INT),\
                        np.linspace(STEP2,STEP3,SUB_INT),\
@@ -283,4 +279,3 @@ plt.legend(('theta_g hat',))
 plt.title("PLL Control Angle")
 
 plt.show()               
-print("working?")

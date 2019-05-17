@@ -3,6 +3,7 @@ Created on May 12, 2019
 
 @author: baumj
 
+HW3 - Probem 1
 Implement Newton Raphson iteration for single diode PV model
 '''
 
@@ -12,8 +13,6 @@ import numpy as np  # Methods for linear algebra
 from numpy.linalg import inv
 from scipy.optimize import newton
 from scipy import misc
-#from scipy.integrate import odeint  #refs odeint directly instead of long pointer
-#from scipy.integrate import solve_ivp #ODE45 equiv (use this instead of odeint)
 import matplotlib.pyplot as plt  
 
 #Scientific Constants
@@ -29,8 +28,6 @@ Rsh = 419.78
 Nc = 128
 Tk = 298 #Standard test conditions 25C
 
-#Ns = ? #number of series modules
-#Np = ? #number of parallel modules 
 err = 1e-8
 
 vt = Nc*Kb/qe*Tk*eta
@@ -43,9 +40,8 @@ vm_arr = np.linspace(0,100,500) #vector of module voltages
 def g(i_d):
     return i0*(math.exp((k1-k2*i_d)/vt)-1) - i_d
 
-#x0 = newton(g, id_0, fprime=None, args=(),tol=err, fprime2=None ) #args might be constants to feed into g func
 
-def NewtonsMethod(g, x, tol):#, i0,k1,k2,vt):    
+def NewtonsMethod(g, x, tol):    
     while True:
         x1 = x - g(x) / misc.derivative(g, x)
         t = abs(x1 - x)
@@ -85,7 +81,8 @@ print("Number of series modules:",Ns)
 print("Number of parallel modules:",Np)
 print("Total modules in array:",Np*Ns)
 
-#plot for Part B    
+#plot for Part B   
+fig1 = plt.figure(1) 
 plt.plot(vm_arr,im_sol)    
 plt.title("PV Module I-V Curve")
 plt.xlabel("Voltage (V)")
@@ -96,7 +93,7 @@ plt.grid(b=None, which='major', axis='both')
 plt.annotate("Isc=%.2f" % Isc,(0,Isc),xytext=(10,4),arrowprops={'arrowstyle':'->'})
 plt.annotate("Voc=%.1f" % Voc,(Voc,0),xytext=(70,0.5),arrowprops={'arrowstyle':'->'})
 plt.annotate("MPP=%d W  Vmpp=%.1f V  Impp=%.2f A" % (np.max(Pm),Vmpp,Impp),(Vmpp,Impp),xytext=(40,5),arrowprops={'arrowstyle':'->'})
-plt.show()
+
 
 
 ## Part D ## plot for whole array
@@ -107,25 +104,24 @@ im_arr = np.zeros((len(irrad_arr),len(vm_arr)))
 
 k2 = Rs*Rsh/(Rs+Rsh)    
     
-    
+fig2 = plt.figure(2)
+   
 for (j,ig) in enumerate(irrad_arr):    
     for (i,vm) in enumerate(vm_arr):
         k1 = Rsh*(vm+Rs*ig)/(Rs+Rsh)
         id_arr[j,i], im_arr[j,i] = NewtonsMethod(g,id_0,err)
-        #x0 = newton(g, id_0, fprime=None, args=(),tol=err, fprime2=None ) #args might be constants to feed into g func
-        #print(vm,sol)
-    
+
     text = "ig: " + str(np.round(ig,3))
-    plt.plot(vm_arr,im_arr[j,:],label=text)
+    plt.plot(Ns*vm_arr,Np*im_arr[j,:],label=text)
 
    
-plt.title("PV Module I-V Curves")
+plt.title("PV Array I-V Curves")
 plt.xlabel("Voltage (V)")
 plt.ylabel("Current (A)")
 plt.ylim(bottom=0)
 plt.xlim(left=0)
 plt.grid(b=None, which='major', axis='both')
 plt.legend()
+
 plt.show()
         
-print("working?")
