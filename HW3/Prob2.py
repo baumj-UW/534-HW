@@ -105,13 +105,12 @@ def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,k2,id_0,Qref):  #x is an array of st
     return dxdt
 
 def PVin(vdc,ig,id_0,Ns,Np,Rsh,Rs,k2,i0):
-     ##PV module eqns## --> vm and k1 can move into newtons method
+     ##PV module eqns## 
     vm = vdc/Ns 
     k1 = Rsh*(vm+Rs*ig)/(Rs+Rsh)
-    ipv_d, im = NewtonsMethod(g, id_0,ig,k1,k2,i0,Rsh) #returns im from NR function; g is updated with globals at this point
-    pv_in = vdc*im*Np 
-    
-    return pv_in
+    ipv_d, im = NewtonsMethod(g, id_0,ig,k1,k2,i0,Rsh) #returns im from NR function; 
+    return vdc*im*Np 
+
 
 def CalcPref(Zdc,v2dc,vref_dc,Pin,Kdc_p=Kdc_p):
     return Zdc + Kdc_p*(v2dc - vref_dc**2) + Pin
@@ -125,18 +124,19 @@ def dgdx(x,k1,k2,i0,vt=VT):
     #derivative function for calculating PV array current Iref
     return i0*(-k2/vt)*math.exp((k1-k2*x)/vt) - 1
 
-#x0 = newton(g, id_0, fprime=None, args=(),tol=err, fprime2=None ) #args might be constants to feed into g func
-
-def NewtonsMethod(g, x, ig, k1, k2, i0, Rsh, tol=err):#, i0,k1,k2,vt):    
+def NewtonsMethod(g, x, ig, k1, k2, i0, Rsh, tol=err): 
     while True:
-        x1 = x - g(x,k1,k2,i0) / dgdx(x,k1,k2,i0) #misc.derivative(g, x)
+        x1 = x - g(x,k1,k2,i0) / dgdx(x,k1,k2,i0) 
         t = abs(x1 - x)
         if t < tol:
             break
         x = x1
-    im = ig-x-(k1-k2*x)/Rsh    # CHECK THISS
+    im = ig-x-(k1-k2*x)/Rsh    
     return x, im
- 
+
+def Idq_PQac(i_d,i_q,v_d=Vpk,v_q=0): #Return AC P, Q; assume v_dq constant
+    Vdq = [[v_d,v_q],[v_q,-v_d]]
+    return (3/2)*np.matmul(Vdq,[[i_d],[i_q]])
 
 #init condit
 id_0 = 0  #FIGURE OUT VARIABLE SETUP
@@ -182,7 +182,7 @@ Vref_dc = Vmpp*Ns ## array of ref Vdc corresponding to all simulation igs
 Qref_sim = [0, 0, 200e3, 200e3]
 ipv_d = id_0 # id_arr[-1,np.argmax(Pm)] ## initial pv diode current for NR; based on ig_stc equilib. --> maybe update to be "id_mpp" from iv curve
 
-results = [0,0,0,0]
+results = [None]*4
 initPV = np.zeros((4,8))  # initial conditions for 4 simulation changes [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
 initPV[0,:] = [1.6986e3, 0, 1.2740, 0, 1.7073e6, -3.246e3, 0, 2*np.pi*60]
 eval_times = np.array([np.linspace(0,STEP1,SUB_INT),\
@@ -220,6 +220,25 @@ results[3] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[3], Ns, Np, \
 
 # Combine solution results to plot
 SIM_STEPS = [STEP1,STEP2,STEP3,STEP4]
+
+Pin_sim = np.zeros((len(results),SUB_INT))  ## this works because all simulation step intervals are the same
+Pref_sim = np.zeros((len(results),SUB_INT)) 
+Pac_sim = np.zeros((len(results),SUB_INT)) 
+Qac_sim = np.zeros((len(results),SUB_INT)) 
+Vdc_ref_sim = np.ones((len(results),SUB_INT))
+Qacref_sim = np.ones((len(results),SUB_INT))
+sim_time = np.zeros((len(results),SUB_INT)) 
+for (i,res) in enumerate(results):
+    for j in range(SUB_INT):
+        Pin_sim[i,j] = PVin(np.sqrt(res.y[4,j]), irrad_arr[i], id_mpp[i], Ns, Np, Rsh, Rs, k2, i0) #res.y[4,j] = Vdc^2 at step j
+        Pref_sim[i,j] = CalcPref(res.y[5,j], res.y[4,j], Vref_dc[i], Pin_sim[i,j], Kdc_p) #res.y[5,j] = Zdc
+        Pac_sim[i,j], Qac_sim[i,j] = Idq_PQac(res.y[0,j], res.y[1,j]) #res.y[0:1] = i_dq
+    Vdc_ref_sim[i,:] = Vdc_ref_sim[i,:] * Vref_dc[i]
+    Qacref_sim[i,:] = Qacref_sim[i,:] * Qref_sim[i]
+    sim_time[i] = res.t
+
+
+sim_time = sim_time.flatten()
 #[id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll] = results[0].y[:] 
 ## plots
 ## Vdc, Vdcref
@@ -229,13 +248,13 @@ SIM_STEPS = [STEP1,STEP2,STEP3,STEP4]
 ##   Mod(pll angle, 2pi), mod(grid angle, 2pi)  
 
 Vdc_figs = plt.figure(1)
+plt.plot(sim_time,Vdc_ref_sim.flatten(),label='Vdc ref',color='r')
 for res in results:
     plt.plot(res.t,np.sqrt(res.y[4]),label='Vdc',color='b')
-plt.step(SIM_STEPS,Vref_dc,where='pre',label='Vdc ref',color='r')
 plt.grid(True)
 plt.xlabel('Time (sec)')
 plt.ylabel('DC-Link Voltage (V)')
-plt.legend(('Vdc',))
+plt.legend(('Vdc Ref','Vdc Actual',))
 
 
 idq_figs = plt.figure(2)
@@ -247,18 +266,33 @@ plt.xlabel('Time (sec)')
 plt.ylabel('AC-Side Current-dq')
 plt.legend(('id','iq'))
 
-plt.show()
 
-# results = np.zeros((4*NGEN,len(sim_times))) #array of results [speed;delta;E'q;E'd]
-# 
-# speedFig = plt.figure(1) #rotor speed plot
-# for omega in range(NGEN):
-#     results[omega,:] = np.concatenate((fault_sol.y[omega,:],
-#                                        postf_sol.y[omega,:]),axis=0)
-#     plt.plot(sim_times,(results[omega,:]+W_S)/W_S,
-#              label='Gen '+str(omega+1))    
-# plt.xlabel('Time (sec)')
-# plt.ylabel('Rotor Speed (pu)')
-# plt.legend()
-# plt.grid(True)                
+p_figs = plt.figure(3)
+plt.plot(sim_time,Pac_sim.flatten(),label='P Actual')
+plt.plot(sim_time,Pref_sim.flatten(),label='P Ref')
+plt.plot(sim_time,Pin_sim.flatten(),label='P in')
+plt.grid(True)
+plt.xlabel('Time (sec)')
+plt.ylabel('Active Power (W)')
+plt.legend()
+
+
+q_figs = plt.figure(4)
+plt.plot(sim_time,Qac_sim.flatten(),label='Q Actual')
+plt.plot(sim_time,Qacref_sim.flatten(),label='Q Ref')
+plt.grid(True)
+plt.xlabel('Time (sec)')
+plt.ylabel('Reactive Power (VAr)')
+plt.legend()
+
+
+theta_figs = plt.figure(5)
+for res in results:
+    plt.plot(res.t,np.mod(res.y[6],2*np.pi),label='theta_g',color='b')
+plt.grid(True)
+plt.xlabel('Time (sec)')
+plt.ylabel('Angle mod 2*pi (rad)')
+plt.legend(('theta_g hat',))
+
+plt.show()               
 print("working?")
