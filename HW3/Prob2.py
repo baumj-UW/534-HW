@@ -35,17 +35,16 @@ C = 19.25e-3
 Hc = C/2
 Kdc_p = Hc*2*np.pi*10 
 Kdc_i = Hc*(2*np.pi*10)**2
-#Kdc_Hc = C/2
 Hpll = 1/Vpk
 Ki_pll = Hpll*(2*np.pi*500)**2 
-Kp_pll = Hpll*2*2*np.pi*500  ### mult by Hpll
-#Kpll_Hpll = 1/Vpk
+Kp_pll = Hpll*2*2*np.pi*500  
 Kp_cc = 0.1
 Ki_cc = 0.75
 
 err = 1e-8
 
 VT = Nc*Kb/qe*Tk*eta
+k2 = Rs*Rsh/(Rs+Rsh)    
 
 ## Simulation times ##
 T = 1/60 #period 
@@ -66,21 +65,14 @@ def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,k2,id_0,Qref):  #x is an array of st
     i_d, i_q, z_d, z_q, v2dc, Zdc, thetaHat_g, Zpll = x 
     
     ## algebraic eqns ###
-    v_d = Vpk ## more accurate using cos(theta-theta) blah
+    v_d = Vpk ## more accurate using cos(theta-theta) 
     v_q = 0 
-    #i_in #from ig, vdc This should be the im below
-    
-    ##PV module eqns## --> vm and k1 can move into newtons method
-#     vm = np.sqrt(v2dc)/Ns 
-#     k1 = Rsh*(vm+Rs*ig)/(Rs+Rsh)
-#     ipv_d, im = NewtonsMethod(g, id_0,ig,k1,k2,i0,Rsh) #returns im from NR function; g is updated with globals at this point
-#     Pin = np.sqrt(v2dc)*im*Np 
+ 
+    ##PV module eqns## 
     Pin = PVin(np.sqrt(v2dc), ig, id_0, Ns, Np, Rsh, Rs, k2, i0)
     Pref = CalcPref(Zdc, v2dc, vref_dc, Pin, Kdc_p)
-    #Qref = 0
-    #Pout #AC output from inv
-    #Pmpp # I think this can happen outside the diff eqn
-    iref_d, iref_q = (2/3)/(v_d**2 + v_q**2)*np.matmul([[v_d,v_q],[v_q,-v_d]],[[Pref],[Qref]])#1, 0## solve for iref_dq w/ newton raphson at each time step. I think these are from prob 1. convert to dq
+
+    iref_d, iref_q = (2/3)/(v_d**2 + v_q**2)*np.matmul([[v_d,v_q],[v_q,-v_d]],[[Pref],[Qref]])## solve for iref_dq w/ newton raphson at each time step. I think these are from prob 1. convert to dq
     #iref_d = (2/(3*v_d))*(Pref)  ## from lect 9 notes, use above line for full eqn..
     #iref_q =0
     
@@ -138,6 +130,8 @@ def Idq_PQac(i_d,i_q,v_d=Vpk,v_q=0): #Return AC P, Q; assume v_dq constant
     Vdq = [[v_d,v_q],[v_q,-v_d]]
     return (3/2)*np.matmul(Vdq,[[i_d],[i_q]])
 
+
+## compute equilibrium  to initialize model
 #init condit
 id_0 = 0  #FIGURE OUT VARIABLE SETUP
 
@@ -149,7 +143,7 @@ irrad_arr = np.array([1, 1/2, 1/2, 1/4]) * ig_stc #array of insolation current f
 id_arr = np.zeros((len(irrad_arr),len(V_m)))
 im_arr = np.zeros((len(irrad_arr),len(V_m)))
 
-k2 = Rs*Rsh/(Rs+Rsh)    
+
 
 Pm = [None]*len(irrad_arr)
 Vmpp = np.zeros(irrad_arr.shape)
@@ -174,10 +168,7 @@ Np = np.round(Pmax_array/(Ns*np.max(Pm[0])))
 ###
 
 
-### Part A ###
-## compute equilibrium values for all states between 2V<vdc<=Voc
-#Vref_dc = np.linspace(2*Vpk,Voc*Ns) #Vdc,ref of array  --> part B will pick this based on Vmpp
-#Vref_m = Vref_dc/Ns #might not be necessary
+
 Vref_dc = Vmpp*Ns ## array of ref Vdc corresponding to all simulation igs
 Qref_sim = [0, 0, 200e3, 200e3]
 ipv_d = id_0 # id_arr[-1,np.argmax(Pm)] ## initial pv diode current for NR; based on ig_stc equilib. --> maybe update to be "id_mpp" from iv curve
@@ -189,27 +180,27 @@ eval_times = np.array([np.linspace(0,STEP1,SUB_INT),\
                        np.linspace(STEP1,STEP2,SUB_INT),\
                        np.linspace(STEP2,STEP3,SUB_INT),\
                        np.linspace(STEP3,STEP4,SUB_INT)]) 
-#Vref_dc_init = Vmpp_array
-#Solve ODE for each eval time  ## need to calc input steps with NR 
+
+#Solve ODE for each eval time  ## input calculated with NR above
 results[0] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[0], Ns, Np,\
                                                 irrad_arr[0], Rsh, Rs,k2,\
                                                 id_mpp[0],Qref_sim[0]),\
                     [0,STEP1],initPV[0,:],t_eval=eval_times[0])  
 
-#Vref_dc_init = #solve for new Vmpp
+
 results[1] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[1], Ns, Np,\
                                                 irrad_arr[1], Rsh, Rs, k2,\
                                                 id_mpp[1],Qref_sim[1]),\
                     [STEP1,STEP2],results[0].y[:,-1],t_eval=eval_times[1])
 
 
-#Vref_dc_init = #solve for new Vmpp
+
 results[2] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[2], Ns, Np, \
                                                 irrad_arr[2], Rsh, Rs, k2,\
                                                 id_mpp[2],Qref_sim[2]),\
                     [STEP2,STEP3],results[1].y[:,-1],t_eval=eval_times[2])
 
-#Vref_dc_init = #solve for new Vmpp
+
 results[3] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[3], Ns, Np, \
                                                 irrad_arr[3], Rsh, Rs, k2,\
                                                 id_mpp[3],Qref_sim[3]),\
@@ -239,13 +230,6 @@ for (i,res) in enumerate(results):
 
 
 sim_time = sim_time.flatten()
-#[id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll] = results[0].y[:] 
-## plots
-## Vdc, Vdcref
-## Id, Iq
-## P and Pref
-## Q and Qref?
-##   Mod(pll angle, 2pi), mod(grid angle, 2pi)  
 
 Vdc_figs = plt.figure(1)
 plt.plot(sim_time,Vdc_ref_sim.flatten(),label='Vdc ref',color='r')
@@ -253,8 +237,9 @@ for res in results:
     plt.plot(res.t,np.sqrt(res.y[4]),label='Vdc',color='b')
 plt.grid(True)
 plt.xlabel('Time (sec)')
-plt.ylabel('DC-Link Voltage (V)')
+plt.ylabel('Voltage (V)')
 plt.legend(('Vdc Ref','Vdc Actual',))
+plt.title("DC-Link Voltage")
 
 
 idq_figs = plt.figure(2)
@@ -263,9 +248,9 @@ for res in results:
     plt.plot(res.t,res.y[1],label='iq',color='r')
 plt.grid(True)
 plt.xlabel('Time (sec)')
-plt.ylabel('AC-Side Current-dq')
+plt.ylabel('dq-Current (A)')
 plt.legend(('id','iq'))
-
+plt.title("dq-Current Outputs")
 
 p_figs = plt.figure(3)
 plt.plot(sim_time,Pac_sim.flatten(),label='P Actual')
@@ -275,6 +260,7 @@ plt.grid(True)
 plt.xlabel('Time (sec)')
 plt.ylabel('Active Power (W)')
 plt.legend()
+plt.title("Active Power Output")
 
 
 q_figs = plt.figure(4)
@@ -284,6 +270,7 @@ plt.grid(True)
 plt.xlabel('Time (sec)')
 plt.ylabel('Reactive Power (VAr)')
 plt.legend()
+plt.title("Reactive Power Output")
 
 
 theta_figs = plt.figure(5)
@@ -293,6 +280,7 @@ plt.grid(True)
 plt.xlabel('Time (sec)')
 plt.ylabel('Angle mod 2*pi (rad)')
 plt.legend(('theta_g hat',))
+plt.title("PLL Control Angle")
 
 plt.show()               
 print("working?")
