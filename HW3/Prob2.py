@@ -130,32 +130,43 @@ id_0 = 0  #FIGURE OUT VARIABLE SETUP
 V_m = np.linspace(0,90,100) #vector of module voltages
    
 ####
-irrad_arr = np.linspace(0,ig_stc,10) #array of insolation current from 0<ig<ig_stc
+irrad_arr = np.array([1, 1/2, 1/2, 1/4]) * ig_stc #array of insolation current for simulation 
 
 id_arr = np.zeros((len(irrad_arr),len(V_m)))
 im_arr = np.zeros((len(irrad_arr),len(V_m)))
 
 k2 = Rs*Rsh/(Rs+Rsh)    
-    
-    
+
+Pm = [None]*len(irrad_arr)#np.zeros(irrad_arr.shape)
+Vmpp = np.zeros(irrad_arr.shape)
+Impp = np.zeros(irrad_arr.shape)
+Isc = np.zeros(irrad_arr.shape)
+Voc = np.zeros(irrad_arr.shape)
+#calc IV curve and related MPPs for each ig    
 for (j,ig) in enumerate(irrad_arr):    
     for (i,vm) in enumerate(V_m):
         k1 = Rsh*(vm+Rs*ig)/(Rs+Rsh)
         id_arr[j,i], im_arr[j,i] = NewtonsMethod(g,id_0,err)
-
+    
+    Pm[j] = np.multiply(V_m,im_arr[j,:])
+    Vmpp[j] = V_m[np.argmax(Pm[j])]
+    Impp[j] = im_arr[j,np.argmax(Pm[j])]
+    Isc[j] = np.max(im_arr[j,:])
+    Voc[j] = V_m[np.argmin(np.abs(im_arr[j,:]))]
+    
 # def getPVratings(ig):
 #     
 #     return 
 
-## calculations based on ig=ig_stc
-Pm = np.multiply(V_m,im_arr[-1,:])
-Vmpp = V_m[np.argmax(Pm)]
-Impp = im_arr[-1,np.argmax(Pm)]
-Isc = np.max(im_arr[-1,:])
-Voc = V_m[np.argmin(np.abs(im_arr[-1,:]))]
+## calculations based on ig=ig_stc FIX THIS!!! --> dont need
+# Pm = np.multiply(V_m,im_arr[-1,:])
+# Vmpp = V_m[np.argmax(Pm)]
+# Impp = im_arr[-1,np.argmax(Pm)]
+# Isc = np.max(im_arr[-1,:])
+# Voc = V_m[np.argmin(np.abs(im_arr[-1,:]))]
 
-Ns = np.ceil(Vmpp_array/Vmpp)
-Np = np.round(Pmax_array/(Ns*np.max(Pm)))
+Ns = np.ceil(Vmpp_array/Vmpp[0]) ## choose Ns and Np based on ig=ig_stc
+Np = np.round(Pmax_array/(Ns*np.max(Pm[0])))
 ###
 
 
@@ -175,16 +186,20 @@ eval_times = np.array([np.linspace(0,STEP1,SUB_INT),\
                        np.linspace(STEP3,STEP4,SUB_INT)]) 
 Vref_dc_init = Vmpp_array
 #Solve ODE for each eval time  ## need to calc input steps with NR 
-results[0] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, ig, Rsh, Rs,ipv_d),\
-                    [0,STEP1],initPV[0,:],t_eval=eval_times[0]) #use default eval times to start   
+results[0] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, irrad_arr[0], Rsh, Rs,ipv_d),\
+                    [0,STEP1],initPV[0,:],t_eval=eval_times[0]) #ipv_d maybe not necessary   
 
-results[1] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, ig, Rsh, Rs,ipv_d),\
+#Vref_dc_init = #solve for new Vmpp
+results[1] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, irrad_arr[1], Rsh, Rs,ipv_d),\
                     [STEP1,STEP2],results[0].y[:,-1],t_eval=eval_times[1])
 
-results[2] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, ig, Rsh, Rs,ipv_d),\
+
+#Vref_dc_init = #solve for new Vmpp
+results[2] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, irrad_arr[2], Rsh, Rs,ipv_d),\
                     [STEP2,STEP3],results[1].y[:,-1],t_eval=eval_times[2])
 
-results[3] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, ig, Rsh, Rs,ipv_d),\
+#Vref_dc_init = #solve for new Vmpp
+results[3] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc_init, Ns, Np, irrad_arr[3], Rsh, Rs,ipv_d),\
                     [STEP3,STEP4],results[2].y[:,-1],t_eval=eval_times[3])
 
 
