@@ -29,8 +29,8 @@ Pmax_array = 1e6 #Total array power
 Vpk = np.sqrt(2/3)*480 # peak line-neutral voltage in V
 
 ## Config from Midterm and HW2 ##
-L = 690e-6 #averaged model inductance (from HW2)
-Rac = 6e-3 #averaged model resistance (from HW2)
+L = 100e-6 #averaged model inductance (from MT)
+Rac = 0.75e-3 #averaged model resistance (from MT)
 C = 19.25e-3
 Hc = C/2
 Kdc_p = Hc*2*np.pi*10 
@@ -45,7 +45,7 @@ Ki_cc = 0.75
 
 err = 1e-8
 
-vt = Nc*Kb/qe*Tk*eta
+VT = Nc*Kb/qe*Tk*eta
 
 ## Simulation times ##
 T = 1/60 #period 
@@ -76,7 +76,7 @@ def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,id_0,Qref):  #x is an array of state
     ##PV module eqns## --> vm and k1 can move into newtons method
     vm = np.sqrt(v2dc)/Ns 
     k1 = Rsh*(vm+Rs*ig)/(Rs+Rsh)
-    ipv_d, im = NewtonsMethod(g, id_0, err) #returns im from NR function; g is updated with globals at this point
+    ipv_d, im = NewtonsMethod(g, id_0,ig,k1,k2,i0,Rsh) #returns im from NR function; g is updated with globals at this point
     Pin = np.sqrt(v2dc)*im*Np 
     Pref = Zdc + Kdc_p*(v2dc - vref_dc**2) + Pin
     #Qref = 0
@@ -107,20 +107,25 @@ def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,id_0,Qref):  #x is an array of state
     return dxdt
 
 
-#function for calculating PV array current Iref
-def g(i_d):
-    return i0*(math.exp((k1-k2*i_d)/vt)-1) - i_d
+
+def g(x,k1,k2,i0,vt=VT): 
+    #function for calculating PV array current Iref
+    return i0*(math.exp((k1-k2*x)/vt)-1) - x  
+
+def dgdx(x,k1,k2,i0,vt=VT): 
+    #derivative function for calculating PV array current Iref
+    return i0*(-k2/vt)*math.exp((k1-k2*x)/vt) - 1
 
 #x0 = newton(g, id_0, fprime=None, args=(),tol=err, fprime2=None ) #args might be constants to feed into g func
 
-def NewtonsMethod(g, x, tol=err):#, i0,k1,k2,vt):    
+def NewtonsMethod(g, x, ig, k1, k2, i0, Rsh, tol=err):#, i0,k1,k2,vt):    
     while True:
-        x1 = x - g(x) / misc.derivative(g, x)
+        x1 = x - g(x,k1,k2,i0) / dgdx(x,k1,k2,i0) #misc.derivative(g, x)
         t = abs(x1 - x)
         if t < tol:
             break
         x = x1
-    im = ig-x-(k1-k2*x)/Rsh    
+    im = ig-x-(k1-k2*x)/Rsh    # CHECK THISS
     return x, im
  
 
@@ -142,15 +147,17 @@ Vmpp = np.zeros(irrad_arr.shape)
 Impp = np.zeros(irrad_arr.shape)
 Isc = np.zeros(irrad_arr.shape)
 Voc = np.zeros(irrad_arr.shape)
+id_mpp = np.zeros(irrad_arr.shape)
 #calc IV curve and related MPPs for each ig    
 for (j,ig) in enumerate(irrad_arr):    
     for (i,vm) in enumerate(V_m):
         k1 = Rsh*(vm+Rs*ig)/(Rs+Rsh)
-        id_arr[j,i], im_arr[j,i] = NewtonsMethod(g,id_0,err)
+        id_arr[j,i], im_arr[j,i] = NewtonsMethod(g,id_0,ig,k1,k2,i0,Rsh,err)
     
     Pm[j] = np.multiply(V_m,im_arr[j,:])
     Vmpp[j] = V_m[np.argmax(Pm[j])]
     Impp[j] = im_arr[j,np.argmax(Pm[j])]
+    id_mpp[j] = id_arr[j,np.argmax(Pm[j])] ## use for init value in NR
     Isc[j] = np.max(im_arr[j,:])
     Voc[j] = V_m[np.argmin(np.abs(im_arr[j,:]))]
 
@@ -176,20 +183,20 @@ eval_times = np.array([np.linspace(0,STEP1,SUB_INT),\
                        np.linspace(STEP3,STEP4,SUB_INT)]) 
 #Vref_dc_init = Vmpp_array
 #Solve ODE for each eval time  ## need to calc input steps with NR 
-results[0] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[0], Ns, Np, irrad_arr[0], Rsh, Rs,ipv_d,Qref_sim[0]),\
+results[0] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[0], Ns, Np, irrad_arr[0], Rsh, Rs,id_mpp[0],Qref_sim[0]),\
                     [0,STEP1],initPV[0,:],t_eval=eval_times[0]) #ipv_d maybe not necessary   
 
 #Vref_dc_init = #solve for new Vmpp
-results[1] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[1], Ns, Np, irrad_arr[1], Rsh, Rs,ipv_d,Qref_sim[1]),\
+results[1] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[1], Ns, Np, irrad_arr[1], Rsh, Rs,id_mpp[1],Qref_sim[1]),\
                     [STEP1,STEP2],results[0].y[:,-1],t_eval=eval_times[1])
 
 
 #Vref_dc_init = #solve for new Vmpp
-results[2] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[2], Ns, Np, irrad_arr[2], Rsh, Rs,ipv_d,Qref_sim[2]),\
+results[2] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[2], Ns, Np, irrad_arr[2], Rsh, Rs,id_mpp[2],Qref_sim[2]),\
                     [STEP2,STEP3],results[1].y[:,-1],t_eval=eval_times[2])
 
 #Vref_dc_init = #solve for new Vmpp
-results[3] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[3], Ns, Np, irrad_arr[3], Rsh, Rs,ipv_d,Qref_sim[3]),\
+results[3] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[3], Ns, Np, irrad_arr[3], Rsh, Rs,id_mpp[3],Qref_sim[3]),\
                     [STEP3,STEP4],results[2].y[:,-1],t_eval=eval_times[3])
 
 
