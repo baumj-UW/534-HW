@@ -55,7 +55,7 @@ STEP3 = 15*T
 STEP4 = 20*T
 SUB_INT = 500 ## number of subintervals for timesteps
 
-def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,id_0,Qref):  #x is an array of state variables [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
+def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,k2,id_0,Qref):  #x is an array of state variables [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
     
     #i_dq = dq current grid side of inv
     #v_dq = dq voltage on grid side of inv
@@ -71,11 +71,12 @@ def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,id_0,Qref):  #x is an array of state
     #i_in #from ig, vdc This should be the im below
     
     ##PV module eqns## --> vm and k1 can move into newtons method
-    vm = np.sqrt(v2dc)/Ns 
-    k1 = Rsh*(vm+Rs*ig)/(Rs+Rsh)
-    ipv_d, im = NewtonsMethod(g, id_0,ig,k1,k2,i0,Rsh) #returns im from NR function; g is updated with globals at this point
-    Pin = np.sqrt(v2dc)*im*Np 
-    Pref = Zdc + Kdc_p*(v2dc - vref_dc**2) + Pin
+#     vm = np.sqrt(v2dc)/Ns 
+#     k1 = Rsh*(vm+Rs*ig)/(Rs+Rsh)
+#     ipv_d, im = NewtonsMethod(g, id_0,ig,k1,k2,i0,Rsh) #returns im from NR function; g is updated with globals at this point
+#     Pin = np.sqrt(v2dc)*im*Np 
+    Pin = PVin(np.sqrt(v2dc), ig, id_0, Ns, Np, Rsh, Rs, k2, i0)
+    Pref = CalcPref(Zdc, v2dc, vref_dc, Pin, Kdc_p)
     #Qref = 0
     #Pout #AC output from inv
     #Pmpp # I think this can happen outside the diff eqn
@@ -103,7 +104,18 @@ def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,id_0,Qref):  #x is an array of state
     dxdt = [dId_dt, dIq_dt, dZd_dt, dZq_dt, dV2dc_dt, dZdc_dt, wg_hat, Ki_pll*v_q] #  np.array("derivs of x") #the derivatives of the state eqns
     return dxdt
 
+def PVin(vdc,ig,id_0,Ns,Np,Rsh,Rs,k2,i0):
+     ##PV module eqns## --> vm and k1 can move into newtons method
+    vm = vdc/Ns 
+    k1 = Rsh*(vm+Rs*ig)/(Rs+Rsh)
+    ipv_d, im = NewtonsMethod(g, id_0,ig,k1,k2,i0,Rsh) #returns im from NR function; g is updated with globals at this point
+    pv_in = vdc*im*Np 
+    
+    return pv_in
 
+def CalcPref(Zdc,v2dc,vref_dc,Pin,Kdc_p=Kdc_p):
+    return Zdc + Kdc_p*(v2dc - vref_dc**2) + Pin
+    
 
 def g(x,k1,k2,i0,vt=VT): 
     #function for calculating PV array current Iref
@@ -179,20 +191,28 @@ eval_times = np.array([np.linspace(0,STEP1,SUB_INT),\
                        np.linspace(STEP3,STEP4,SUB_INT)]) 
 #Vref_dc_init = Vmpp_array
 #Solve ODE for each eval time  ## need to calc input steps with NR 
-results[0] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[0], Ns, Np, irrad_arr[0], Rsh, Rs,id_mpp[0],Qref_sim[0]),\
+results[0] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[0], Ns, Np,\
+                                                irrad_arr[0], Rsh, Rs,k2,\
+                                                id_mpp[0],Qref_sim[0]),\
                     [0,STEP1],initPV[0,:],t_eval=eval_times[0])  
 
 #Vref_dc_init = #solve for new Vmpp
-results[1] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[1], Ns, Np, irrad_arr[1], Rsh, Rs,id_mpp[1],Qref_sim[1]),\
+results[1] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[1], Ns, Np,\
+                                                irrad_arr[1], Rsh, Rs, k2,\
+                                                id_mpp[1],Qref_sim[1]),\
                     [STEP1,STEP2],results[0].y[:,-1],t_eval=eval_times[1])
 
 
 #Vref_dc_init = #solve for new Vmpp
-results[2] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[2], Ns, Np, irrad_arr[2], Rsh, Rs,id_mpp[2],Qref_sim[2]),\
+results[2] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[2], Ns, Np, \
+                                                irrad_arr[2], Rsh, Rs, k2,\
+                                                id_mpp[2],Qref_sim[2]),\
                     [STEP2,STEP3],results[1].y[:,-1],t_eval=eval_times[2])
 
 #Vref_dc_init = #solve for new Vmpp
-results[3] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[3], Ns, Np, irrad_arr[3], Rsh, Rs,id_mpp[3],Qref_sim[3]),\
+results[3] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[3], Ns, Np, \
+                                                irrad_arr[3], Rsh, Rs, k2,\
+                                                id_mpp[3],Qref_sim[3]),\
                     [STEP3,STEP4],results[2].y[:,-1],t_eval=eval_times[3])
 
 
