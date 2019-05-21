@@ -67,8 +67,12 @@ Zdc_base = Zac_base ## not sure if this is valid...
 ## Per unit values
 Rac_pu = Rac/Zac_base
 Ki_cc_pu = Ki_cc*Inom/(omega_base*Vnom)
+Kp_cc_pu = Kp_cc*Inom/Vnom
 Kdc_i_pu = Kdc_i*(2/3)*Zdc_base
+Ki_pll_pu = Ki_pll*np.sqrt(2)*Vnom/omega_base
 BC_pu = omega_base*C*Vnom/Inom
+Vpk_pu = Vpk/Vbase
+
 
 
 ## Simulation times ##
@@ -78,9 +82,11 @@ STEP2 = 10*T
 STEP3 = 15*T
 STEP4 = 20*T
 SUB_INT = 500 ## number of subintervals for timesteps
+SIM_STEPS = [STEP1,STEP2,STEP3,STEP4]
 
 def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,k2,id_0,Qref,\
-                Rac_pu,omega_base,XL_base,Ki_cc_pu,BC_pu,Kdc_i_pu):  
+                Rac_pu,omega_base,XL_base,Ki_cc_pu,BC_pu,\
+                Kdc_i_pu,Ki_pll_pu,Kp_cc_pu,Vpk_pu):  
     #x is an array of state variables [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
     #all state variables and internal vars in PU
     
@@ -93,19 +99,19 @@ def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,k2,id_0,Qref,\
     i_d, i_q, z_d, z_q, v2dc, Zdc, thetaHat_g, Zpll = x 
     
     ## algebraic eqns ###
-    v_d = Vpk ## more accurate using cos(theta-theta) 
+    v_d = Vpk_pu ## more accurate using cos(theta-theta) 
     v_q = 0 
  
-    ##PV module eqns## 
-    Pin = PVin(np.sqrt(v2dc), ig, id_0, Ns, Np, Rsh, Rs, k2, i0)
+    ##PV module eqns##  --> convert back to actual for this part
+    Pin = PVin(np.sqrt(v2dc)*Vbase, ig, id_0, Ns, Np, Rsh, Rs, k2, i0)/Sbase
     
     # Current Controller reference
     Pref = CalcPref(Zdc, v2dc, vref_dc, Pin, Kdc_p)
     iref_d, iref_q = PQac_Idq(v_d,v_q,Pref,Qref)
     
-    wg_hat = Zpll +  Ki_pll*v_q 
-    vt_d = z_d + (iref_d - i_d)*Kp_cc - L*wg_hat*i_q + v_d ## control voltage input to AC side
-    vt_q = z_q + (iref_q - i_q)*Kp_cc + L*wg_hat*i_d + v_q
+    wg_hat = Zpll +  Ki_pll_pu*v_q 
+    vt_d = z_d + (iref_d - i_d)*Kp_cc_pu - XL_base*wg_hat*i_q + v_d ## control voltage input to AC side
+    vt_q = z_q + (iref_q - i_q)*Kp_cc_pu + XL_base*wg_hat*i_d + v_q
     
     ## differential equations ##
 #     dId_dt = (1/L)*(vt_d - i_d*Rac - v_d + L*wg_hat*i_q) 
@@ -127,7 +133,7 @@ def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,k2,id_0,Qref,\
     #dxdt[7] = Kp_pll*v_q # d(Zpll)/dt 
     
     #dxdt = [dId_dt, dIq_dt, dZd_dt, dZq_dt, dV2dc_dt, dZdc_dt, wg_hat, Ki_pll*v_q] ##the derivatives of the state eqns
-    dxdt = [dId_dt, dIq_dt, dZd_dt, dZq_dt, dV2dc_dt, dZdc_dt, wg_hat, Ki_pll*v_q] ##the derivatives of the state eqns
+    dxdt = [dId_dt, dIq_dt, dZd_dt, dZq_dt, dV2dc_dt, dZdc_dt, omega_base*wg_hat, Ki_pll_pu*v_q] ##the derivatives of the state eqns
     return dxdt
 
 def PVin(vdc,ig,id_0,Ns,Np,Rsh,Rs,k2,i0):
@@ -210,44 +216,48 @@ Qref_sim = [0, 0, 200e3, 200e3] #Q input control for simulation steps
 
 results = [None]*4
 initPV = np.zeros((4,8))  # initial conditions for 4 simulation changes [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
-initPV[0,:] = [1.6986e3, 0, 1.2740, 0, Vref_dc[0]**2, -3.246e3, 0, 2*np.pi*60]
+initPV[0,:] = [1.6986e3/Inom, 0, 1.2740/Vbase, 0, (Vref_dc[0]/Vbase)**2, -3.246e3/Sbase, 0, 0]#2*np.pi*60/omega_base]
 eval_times = np.array([np.linspace(0,STEP1,SUB_INT),\
                        np.linspace(STEP1,STEP2,SUB_INT),\
                        np.linspace(STEP2,STEP3,SUB_INT),\
                        np.linspace(STEP3,STEP4,SUB_INT)]) 
 
 #Solve ODE for each eval time  ## input calculated with NR above
-results[0] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[0], Ns, Np,\
-                                                irrad_arr[0], Rsh, Rs,k2,\
-                                                id_mpp[0],Qref_sim[0], Rac_pu,\
+results[0] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[0]/Vbase, Ns, Np,\
+                                                irrad_arr[0]/Inom, Rsh, Rs,k2,\
+                                                id_mpp[0]/Inom,Qref_sim[0]/Sbase, Rac_pu,\
                                                 omega_base,XL_base,Ki_cc_pu,\
-                                                BC_pu,Kdc_i_pu),\
+                                                BC_pu,Kdc_i_pu,Ki_pll_pu,\
+                                                Kp_cc_pu,Vpk_pu),\
                     [0,STEP1],initPV[0,:],t_eval=eval_times[0])  
 
+for i in range(1,len(results)):
+    results[i] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[i]/Vbase, Ns, Np,\
+                                                irrad_arr[i]/Inom, Rsh, Rs,k2,\
+                                                id_mpp[i]/Inom,Qref_sim[i]/Sbase, Rac_pu,\
+                                                omega_base,XL_base,Ki_cc_pu,\
+                                                BC_pu,Kdc_i_pu,Ki_pll_pu,\
+                                                Kp_cc_pu,Vpk_pu),\
+                        SIM_STEPS[i-1:i+1],results[i-1].y[:,-1],t_eval=eval_times[i])
 
-results[1] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[1], Ns, Np,\
-                                                irrad_arr[1], Rsh, Rs, k2,\
-                                                id_mpp[1],Qref_sim[1]),\
-                    [STEP1,STEP2],results[0].y[:,-1],t_eval=eval_times[1])
-
-
-
-results[2] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[2], Ns, Np, \
-                                                irrad_arr[2], Rsh, Rs, k2,\
-                                                id_mpp[2],Qref_sim[2]),\
-                    [STEP2,STEP3],results[1].y[:,-1],t_eval=eval_times[2])
-
-
-results[3] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[3], Ns, Np, \
-                                                irrad_arr[3], Rsh, Rs, k2,\
-                                                id_mpp[3],Qref_sim[3]),\
-                    [STEP3,STEP4],results[2].y[:,-1],t_eval=eval_times[3])
+# 
+# 
+# results[2] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[2], Ns, Np, \
+#                                                 irrad_arr[2], Rsh, Rs, k2,\
+#                                                 id_mpp[2],Qref_sim[2]),\
+#                     [STEP2,STEP3],results[1].y[:,-1],t_eval=eval_times[2])
+# 
+# 
+# results[3] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[3], Ns, Np, \
+#                                                 irrad_arr[3], Rsh, Rs, k2,\
+#                                                 id_mpp[3],Qref_sim[3]),\
+#                     [STEP3,STEP4],results[2].y[:,-1],t_eval=eval_times[3])
 
 
 ## Solution complete! Plot all results
 
 # Combine solution results to plot
-SIM_STEPS = [STEP1,STEP2,STEP3,STEP4]
+
 
 Pin_sim = np.zeros((len(results),SUB_INT))  ## this works because all simulation step intervals are the same
 Pref_sim = np.zeros((len(results),SUB_INT)) 
