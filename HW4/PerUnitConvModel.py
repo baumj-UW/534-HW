@@ -5,6 +5,7 @@ Created on May 20, 2019
 EE534 - HW4
 Recreate converter model in per unit
 '''
+from sympy.physics.quantum.sho1d import omega
 '''
 Created on May 14, 2019
 
@@ -51,7 +52,24 @@ Ki_cc = 0.75
 err = 1e-8
 
 VT = Nc*Kb/qe*Tk*eta
-k2 = Rs*Rsh/(Rs+Rsh)    
+k2 = Rs*Rsh/(Rs+Rsh)  
+
+## Base values for per unit conv
+Sbase = 1e6
+Vnom = np.sqrt(2/3)*480
+Vbase = np.sqrt(2)*Vnom
+Inom = Sbase/(3*Vnom)
+omega_base = 2*np.pi*60
+XL_base = L*omega_base*Inom/Vnom
+Zac_base = Vnom/Inom
+Zdc_base = Zac_base ## not sure if this is valid...
+
+## Per unit values
+Rac_pu = Rac/Zac_base
+Ki_cc_pu = Ki_cc*Inom/(omega_base*Vnom)
+Kdc_i_pu = Kdc_i*(2/3)*Zdc_base
+BC_pu = omega_base*C*Vnom/Inom
+
 
 ## Simulation times ##
 T = 1/60 #period 
@@ -61,7 +79,10 @@ STEP3 = 15*T
 STEP4 = 20*T
 SUB_INT = 500 ## number of subintervals for timesteps
 
-def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,k2,id_0,Qref):  #x is an array of state variables [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
+def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,k2,id_0,Qref,\
+                Rac_pu,omega_base,XL_base,Ki_cc_pu,BC_pu,Kdc_i_pu):  
+    #x is an array of state variables [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
+    #all state variables and internal vars in PU
     
     #i_dq = dq current grid side of inv
     #v_dq = dq voltage on grid side of inv
@@ -80,25 +101,32 @@ def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,k2,id_0,Qref):  #x is an array of st
     
     # Current Controller reference
     Pref = CalcPref(Zdc, v2dc, vref_dc, Pin, Kdc_p)
-    iref_d, iref_q = (2/3)/(v_d**2 + v_q**2)*np.matmul([[v_d,v_q],[v_q,-v_d]],[[Pref],[Qref]])
+    iref_d, iref_q = PQac_Idq(v_d,v_q,Pref,Qref)
     
     wg_hat = Zpll +  Ki_pll*v_q 
     vt_d = z_d + (iref_d - i_d)*Kp_cc - L*wg_hat*i_q + v_d ## control voltage input to AC side
     vt_q = z_q + (iref_q - i_q)*Kp_cc + L*wg_hat*i_d + v_q
     
     ## differential equations ##
-    dId_dt = (1/L)*(vt_d - i_d*Rac - v_d + L*wg_hat*i_q) 
-    dIq_dt = (1/L)*(vt_q - i_q*Rac - v_q - L*wg_hat*i_d) 
+#     dId_dt = (1/L)*(vt_d - i_d*Rac - v_d + L*wg_hat*i_q) 
+#     dIq_dt = (1/L)*(vt_q - i_q*Rac - v_q - L*wg_hat*i_d)
+    dId_dt = (omega_base/XL_base)*(vt_d - i_d*Rac_pu - v_d + XL_base*wg_hat*i_q) 
+    dIq_dt = (omega_base/XL_base)*(vt_q - i_q*Rac_pu - v_q - XL_base*wg_hat*i_d) 
     
-    dZd_dt = Ki_cc*(iref_d - i_d) 
-    dZq_dt = Ki_cc*(iref_q - i_q) 
+#     dZd_dt = Ki_cc*(iref_d - i_d) 
+#     dZq_dt = Ki_cc*(iref_q - i_q)
+    dZd_dt = omega_base*Ki_cc_pu*(iref_d - i_d) 
+    dZq_dt = omega_base*Ki_cc_pu*(iref_q - i_q) 
     
-    dV2dc_dt = (2/C)*(Pin - (3/2)*(vt_d*i_d + vt_q*i_q)) 
-    dZdc_dt = Kdc_i*(v2dc - vref_dc**2)  
+#     dV2dc_dt = (2/C)*(Pin - (3/2)*(vt_d*i_d + vt_q*i_q)) 
+#     dZdc_dt = Kdc_i*(v2dc - vref_dc**2)  
+    dV2dc_dt = (omega_base/BC_pu)*(Pin - (3/2)*(vt_d*i_d + vt_q*i_q)) 
+    dZdc_dt = Kdc_i_pu*(v2dc - vref_dc**2) 
     
     #dxdt[6] = wg_hat # = Zpll +  Kpll~ *v_q # d(thetag_hat)/dt
     #dxdt[7] = Kp_pll*v_q # d(Zpll)/dt 
     
+    #dxdt = [dId_dt, dIq_dt, dZd_dt, dZq_dt, dV2dc_dt, dZdc_dt, wg_hat, Ki_pll*v_q] ##the derivatives of the state eqns
     dxdt = [dId_dt, dIq_dt, dZd_dt, dZq_dt, dV2dc_dt, dZdc_dt, wg_hat, Ki_pll*v_q] ##the derivatives of the state eqns
     return dxdt
 
@@ -135,6 +163,10 @@ def NewtonsMethod(g, x, ig, k1, k2, i0, Rsh, tol=err):
 def Idq_PQac(i_d,i_q,v_d=Vpk,v_q=0): #Return AC P, Q; default v_dq constant
     Vdq = [[v_d,v_q],[v_q,-v_d]]
     return (3/2)*np.matmul(Vdq,[[i_d],[i_q]])
+
+def PQac_Idq(v_d,v_q,Pac,Qac): #Return Id, Iq from Vdq and PQ ref
+    return (2/3)/(v_d**2 + v_q**2)*np.matmul([[v_d,v_q],[v_q,-v_d]],[[Pac],[Qac]])
+
 
 
 ## compute equilibrium  to initialize model
@@ -187,7 +219,9 @@ eval_times = np.array([np.linspace(0,STEP1,SUB_INT),\
 #Solve ODE for each eval time  ## input calculated with NR above
 results[0] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[0], Ns, Np,\
                                                 irrad_arr[0], Rsh, Rs,k2,\
-                                                id_mpp[0],Qref_sim[0]),\
+                                                id_mpp[0],Qref_sim[0], Rac_pu,\
+                                                omega_base,XL_base,Ki_cc_pu,\
+                                                BC_pu,Kdc_i_pu),\
                     [0,STEP1],initPV[0,:],t_eval=eval_times[0])  
 
 
