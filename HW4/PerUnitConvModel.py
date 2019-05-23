@@ -57,8 +57,11 @@ k2 = Rs*Rsh/(Rs+Rsh)
 ## Base values for per unit conv
 Sbase = 1e6
 Vnom = np.sqrt(2/3)*480
-Vbase = np.sqrt(2)*Vnom
+Vrms = np.sqrt(2)*Vnom
+Vbase = Vnom
 Inom = Sbase/(3*Vnom)
+Irms = np.sqrt(2)*Inom
+Ibase = Inom
 omega_base = 2*np.pi*60
 XL_base = L*omega_base*Inom/Vnom
 Zac_base = Vnom/Inom
@@ -69,7 +72,8 @@ Rac_pu = Rac/Zac_base
 Ki_cc_pu = Ki_cc*Inom/(omega_base*Vnom)
 Kp_cc_pu = Kp_cc*Inom/Vnom
 Kdc_i_pu = Kdc_i*(2/3)*Zdc_base
-Ki_pll_pu = Ki_pll*np.sqrt(2)*Vnom/omega_base
+Kdc_p_pu = Kdc_p*(2/3)*Zdc_base
+Ki_pll_pu = Ki_pll*Vbase/omega_base 
 BC_pu = omega_base*C*Vnom/Inom
 Vpk_pu = Vpk/Vbase
 
@@ -86,7 +90,7 @@ SIM_STEPS = [STEP1,STEP2,STEP3,STEP4]
 
 def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,k2,id_0,Qref,\
                 Rac_pu,omega_base,XL_base,Ki_cc_pu,BC_pu,\
-                Kdc_i_pu,Ki_pll_pu,Kp_cc_pu,Vpk_pu):  
+                Kdc_i_pu,Ki_pll_pu,Kp_cc_pu,Vpk_pu,Kdc_p_pu):  
     #x is an array of state variables [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
     #all state variables and internal vars in PU
     
@@ -106,7 +110,7 @@ def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,k2,id_0,Qref,\
     Pin = PVin(np.sqrt(v2dc)*Vbase, ig, id_0, Ns, Np, Rsh, Rs, k2, i0)/Sbase
     
     # Current Controller reference
-    Pref = CalcPref(Zdc, v2dc, vref_dc, Pin, Kdc_p)
+    Pref = CalcPref(Zdc, v2dc, vref_dc, Pin, Kdc_p_pu) #this calc is in pu
     iref_d, iref_q = PQac_Idq(v_d,v_q,Pref,Qref)
     
     wg_hat = Zpll +  Ki_pll_pu*v_q 
@@ -126,7 +130,7 @@ def PVconvModel(t,x,vref_dc,Ns,Np,ig,Rsh,Rs,k2,id_0,Qref,\
     
 #     dV2dc_dt = (2/C)*(Pin - (3/2)*(vt_d*i_d + vt_q*i_q)) 
 #     dZdc_dt = Kdc_i*(v2dc - vref_dc**2)  
-    dV2dc_dt = (omega_base/BC_pu)*(Pin - (3/2)*(vt_d*i_d + vt_q*i_q)) 
+    dV2dc_dt = (3*omega_base/BC_pu)*(Pin - (vt_d*i_d + vt_q*i_q))  
     dZdc_dt = Kdc_i_pu*(v2dc - vref_dc**2) 
     
     #dxdt[6] = wg_hat # = Zpll +  Kpll~ *v_q # d(thetag_hat)/dt
@@ -144,7 +148,7 @@ def PVin(vdc,ig,id_0,Ns,Np,Rsh,Rs,k2,i0):
     return vdc*im*Np 
 
 
-def CalcPref(Zdc,v2dc,vref_dc,Pin,Kdc_p=Kdc_p):
+def CalcPref(Zdc,v2dc,vref_dc,Pin,Kdc_p=Kdc_p_pu):
     return Zdc + Kdc_p*(v2dc - vref_dc**2) + Pin
     
 
@@ -166,12 +170,12 @@ def NewtonsMethod(g, x, ig, k1, k2, i0, Rsh, tol=err):
     im = ig-x-(k1-k2*x)/Rsh    
     return x, im
 
-def Idq_PQac(i_d,i_q,v_d=Vpk,v_q=0): #Return AC P, Q; default v_dq constant
+def Idq_PQac(i_d,i_q,v_d=Vpk_pu,v_q=0): #Return AC P, Q; default v_dq constant
     Vdq = [[v_d,v_q],[v_q,-v_d]]
-    return (3/2)*np.matmul(Vdq,[[i_d],[i_q]])
+    return np.matmul(Vdq,[[i_d],[i_q]]) ##remove 3/2 factor to return pu (according to notes)
 
 def PQac_Idq(v_d,v_q,Pac,Qac): #Return Id, Iq from Vdq and PQ ref
-    return (2/3)/(v_d**2 + v_q**2)*np.matmul([[v_d,v_q],[v_q,-v_d]],[[Pac],[Qac]])
+    return (1)/(v_d**2 + v_q**2)*np.matmul([[v_d,v_q],[v_q,-v_d]],[[Pac],[Qac]]) ## remove (2/3) factor to return pu
 
 
 
@@ -216,7 +220,7 @@ Qref_sim = [0, 0, 200e3, 200e3] #Q input control for simulation steps
 
 results = [None]*4
 initPV = np.zeros((4,8))  # initial conditions for 4 simulation changes [id, iq, Zd, Zq, Vdc^2, Zdc, theta^g, Zpll]
-initPV[0,:] = [1.6986e3/Inom, 0, 1.2740/Vbase, 0, (Vref_dc[0]/Vbase)**2, -3.246e3/Sbase, 0, 0]#2*np.pi*60/omega_base]
+initPV[0,:] = [1.6986e3/(2*Inom), 0/Ibase, 1.2740/Vbase, 0/Vbase, (Vref_dc[0]/Vbase)**2, -3.246e3/(Sbase), 0, 1]#2*np.pi*60/omega_base]
 eval_times = np.array([np.linspace(0,STEP1,SUB_INT),\
                        np.linspace(STEP1,STEP2,SUB_INT),\
                        np.linspace(STEP2,STEP3,SUB_INT),\
@@ -224,20 +228,20 @@ eval_times = np.array([np.linspace(0,STEP1,SUB_INT),\
 
 #Solve ODE for each eval time  ## input calculated with NR above
 results[0] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[0]/Vbase, Ns, Np,\
-                                                irrad_arr[0]/Inom, Rsh, Rs,k2,\
-                                                id_mpp[0]/Inom,Qref_sim[0]/Sbase, Rac_pu,\
+                                                irrad_arr[0], Rsh, Rs,k2,\
+                                                id_mpp[0],Qref_sim[0]/Sbase, Rac_pu,\
                                                 omega_base,XL_base,Ki_cc_pu,\
                                                 BC_pu,Kdc_i_pu,Ki_pll_pu,\
-                                                Kp_cc_pu,Vpk_pu),\
+                                                Kp_cc_pu,Vpk_pu,Kdc_p_pu),\
                     [0,STEP1],initPV[0,:],t_eval=eval_times[0])  
 
 for i in range(1,len(results)):
     results[i] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[i]/Vbase, Ns, Np,\
-                                                irrad_arr[i]/Inom, Rsh, Rs,k2,\
-                                                id_mpp[i]/Inom,Qref_sim[i]/Sbase, Rac_pu,\
+                                                irrad_arr[i], Rsh, Rs,k2,\
+                                                id_mpp[i],Qref_sim[i]/Sbase, Rac_pu,\
                                                 omega_base,XL_base,Ki_cc_pu,\
                                                 BC_pu,Kdc_i_pu,Ki_pll_pu,\
-                                                Kp_cc_pu,Vpk_pu),\
+                                                Kp_cc_pu,Vpk_pu,Kdc_p_pu),\
                         SIM_STEPS[i-1:i+1],results[i-1].y[:,-1],t_eval=eval_times[i])
 
 # 
@@ -267,12 +271,12 @@ Vdc_ref_sim = np.ones((len(results),SUB_INT))
 Qacref_sim = np.ones((len(results),SUB_INT))
 sim_time = np.zeros((len(results),SUB_INT)) 
 for (i,res) in enumerate(results):
-    for j in range(SUB_INT):
-        Pin_sim[i,j] = PVin(np.sqrt(res.y[4,j]), irrad_arr[i], id_mpp[i], Ns, Np, Rsh, Rs, k2, i0) #res.y[4,j] = Vdc^2 at step j
-        Pref_sim[i,j] = CalcPref(res.y[5,j], res.y[4,j], Vref_dc[i], Pin_sim[i,j], Kdc_p) #res.y[5,j] = Zdc
-        Pac_sim[i,j], Qac_sim[i,j] = Idq_PQac(res.y[0,j], res.y[1,j]) #res.y[0:1] = i_dq
-    Vdc_ref_sim[i,:] = Vdc_ref_sim[i,:] * Vref_dc[i]
-    Qacref_sim[i,:] = Qacref_sim[i,:] * Qref_sim[i]
+    for j in range(SUB_INT): ##return values in per unit (res.y vals will come in pu)
+        Pin_sim[i,j] = PVin(np.sqrt(res.y[4,j])*Vbase, irrad_arr[i], id_mpp[i], Ns, Np, Rsh, Rs, k2, i0)/Sbase #res.y[4,j] = Vdc^2 at step j
+        Pref_sim[i,j] = CalcPref(res.y[5,j], res.y[4,j], Vref_dc[i]/Vbase, Pin_sim[i,j], Kdc_p_pu) #res.y[5,j] = Zdc
+        Pac_sim[i,j], Qac_sim[i,j] = Idq_PQac(res.y[0,j], res.y[1,j]) #res.y[0:1] = i_dq 
+    Vdc_ref_sim[i,:] = Vdc_ref_sim[i,:] * Vref_dc[i]/Vbase #plot in pu
+    Qacref_sim[i,:] = Qacref_sim[i,:] * Qref_sim[i]/Sbase #plot in pu
     sim_time[i] = res.t
 
 
@@ -284,9 +288,9 @@ for res in results:
     plt.plot(res.t,np.sqrt(res.y[4]),label='Vdc',color='b')
 plt.grid(True)
 plt.xlabel('Time (sec)')
-plt.ylabel('Voltage (V)')
+plt.ylabel('Voltage (pu)')
 plt.legend(('Vdc Ref','Vdc Actual',))
-plt.title("DC-Link Voltage")
+plt.title("DC-Link Voltage (Per Unit)")
 
 
 idq_figs = plt.figure(2)
@@ -295,9 +299,9 @@ for res in results:
     plt.plot(res.t,res.y[1],label='iq',color='r')
 plt.grid(True)
 plt.xlabel('Time (sec)')
-plt.ylabel('dq-Current (A)')
+plt.ylabel('dq-Current (pu)')
 plt.legend(('id','iq'))
-plt.title("dq-Current Outputs")
+plt.title("dq-Current Outputs (Per Unit)")
 
 p_figs = plt.figure(3)
 plt.plot(sim_time,Pac_sim.flatten(),label='P Actual')
@@ -315,9 +319,9 @@ plt.plot(sim_time,Qac_sim.flatten(),label='Q Actual')
 plt.plot(sim_time,Qacref_sim.flatten(),label='Q Ref')
 plt.grid(True)
 plt.xlabel('Time (sec)')
-plt.ylabel('Reactive Power (VAr)')
+plt.ylabel('Reactive Power (pu)')
 plt.legend()
-plt.title("Reactive Power Output")
+plt.title("Reactive Power Output (Per Unit)")
 
 
 theta_figs = plt.figure(5)
