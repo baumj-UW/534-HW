@@ -5,15 +5,6 @@ Created on May 20, 2019
 EE534 - HW4
 Recreate converter model in per unit
 '''
-from sympy.physics.quantum.sho1d import omega
-'''
-Created on May 14, 2019
-
-@author: baumj
-
-EE 534 - HW3 - Problem 2
-Write averaged converter model 
-'''
 import math
 import numpy as np
 from scipy.integrate import solve_ivp #ODE45 
@@ -244,19 +235,6 @@ for i in range(1,len(results)):
                                                 Kp_cc_pu,Vpk_pu,Kdc_p_pu),\
                         SIM_STEPS[i-1:i+1],results[i-1].y[:,-1],t_eval=eval_times[i])
 
-# 
-# 
-# results[2] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[2], Ns, Np, \
-#                                                 irrad_arr[2], Rsh, Rs, k2,\
-#                                                 id_mpp[2],Qref_sim[2]),\
-#                     [STEP2,STEP3],results[1].y[:,-1],t_eval=eval_times[2])
-# 
-# 
-# results[3] = solve_ivp(lambda t, x: PVconvModel(t, x, Vref_dc[3], Ns, Np, \
-#                                                 irrad_arr[3], Rsh, Rs, k2,\
-#                                                 id_mpp[3],Qref_sim[3]),\
-#                     [STEP3,STEP4],results[2].y[:,-1],t_eval=eval_times[3])
-
 
 ## Solution complete! Plot all results
 
@@ -309,9 +287,9 @@ plt.plot(sim_time,Pref_sim.flatten(),label='P Ref')
 plt.plot(sim_time,Pin_sim.flatten(),label='P in')
 plt.grid(True)
 plt.xlabel('Time (sec)')
-plt.ylabel('Active Power (W)')
+plt.ylabel('Active Power (pu)')
 plt.legend()
-plt.title("Active Power Output")
+plt.title("Active Power Output (Per Unit)")
 
 
 q_figs = plt.figure(4)
@@ -331,6 +309,6 @@ plt.grid(True)
 plt.xlabel('Time (sec)')
 plt.ylabel('Angle mod 2*pi (rad)')
 plt.legend(('theta_g hat',))
-plt.title("PLL Control Angle")
+plt.title("PLL Control Angle (from Per Unit Model)")
 
 plt.show()               
