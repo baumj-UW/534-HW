@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 
 # maximum step size for ode solver
-tstep = 5*Tg/200
+tstep = 5*Tg/1e3
 
 # time intervals
 tspan0 = [0, 5*Tg]
@@ -58,7 +58,7 @@ i_d = np.concatenate((id0, id1, id2, id3))
 iq0 = y0[2]
 iq1 = y1[2]
 iq2 = y2[2]
-iq3 = y3[3]
+iq3 = y3[2]
 i_q = np.concatenate((iq0, iq1, iq2, iq3))
 
 # plot results
