@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 
 # maximum step size for ode solver
-tstep = 5*Tg/1e3
+tstep = 5*Tg/200
 
 # time intervals
 tspan0 = [0, 5*Tg]
@@ -24,15 +24,15 @@ x0 = 0, 1.6986e3/I_base, 0, 1.2740/V_base, 0/V_base, 0, 0
 results0 = solve_ivp(lambda t, x: xdot(t, x, V, kp, ki, R, B0, wg, V_base, XL_base, w_base, 1e6/S_base, 0), tspan0, x0, max_step=tstep)
 y0 = results0.y
 
-x1 = y0[:,len(y0)]
+x1 = y0[:,y0.shape[1]-1]
 results1 = solve_ivp(lambda t, x: xdot(t, x, V, kp, ki, R, B0, wg, V_base, XL_base, w_base, 0.5e6/S_base, 0), tspan1, x1, max_step=tstep)
 y1 = results1.y
 
-x2 = y1[:,len(y1)]
+x2 = y1[:,y1.shape[1]-1]
 results2 = solve_ivp(lambda t, x: xdot(t, x, V, kp, ki, R, B0, wg, V_base, XL_base, w_base, 0.5e6/S_base, 200e3/S_base), tspan2, x2, max_step=tstep)
 y2 = results2.y
 
-x3 = y2[:,len(y2)]
+x3 = y2[:,y2.shape[1]-1]
 results3 = solve_ivp(lambda t, x: xdot(t, x, V, kp, ki, R, B0, wg, V_base, XL_base, w_base, 0.25e6/S_base, 200e3/S_base), tspan3, x3, max_step=tstep)
 y3 = results3.y
 
