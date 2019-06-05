@@ -65,6 +65,13 @@ i_q = np.concatenate((iq0, iq1, iq2, iq3))
 for i, angle in enumerate(theta_g):
     theta_g[i] = np.mod(angle, 2*pi)
 
+P = []
+Q = []
+
+for i, cur in enumerate(i_d):
+    P.append((V / V_base) * i_d[i])
+    Q.append((V / V_base) * i_q[i])
+
 plt.figure(1)
 plt.plot(t, theta_g, color='b')
 plt.xlabel('Time (sec)')
@@ -78,5 +85,13 @@ plt.xlabel('Time (sec)')
 plt.ylabel('dq-Current (pu)')
 plt.legend(('id','iq'))
 plt.title("Per Unit Currents")
+
+plt.figure(3)
+plt.plot(t, P, label='P', color='b')
+plt.plot(t, Q, label='Q', color='r')
+plt.xlabel('Time (sec)')
+plt.ylabel('Power (pu)')
+plt.legend(('P','Q'))
+plt.title("Real and Reactive Power")
 
 plt.show()
