@@ -1,6 +1,6 @@
 from numpy import cos, sin
 
-def xdot(t, x, V, kp, ki, R, B0, wg, V_base, XL_base, w_base, P_ref, Q_ref):
+def xdot(t, x, V, kp, ki, R, B0, R0, wg, V_base, XL_base, w_base, P_ref, Q_ref):
     """
     returns change in state dynamics.
     x representst system state, where x = (theta_g, i_d, i_q, z_d, z_q, v_c_d, v_c_q)
@@ -25,37 +25,46 @@ def xdot(t, x, V, kp, ki, R, B0, wg, V_base, XL_base, w_base, P_ref, Q_ref):
     """
     # x = [thetag id iq zd zq vc]
 
-    (theta_g, i_d, i_q, z_d, z_q, v_c_d, v_c_q) = x
+    (theta_g, i_d, i_q, z_d, z_q, v_c_d, v_c_q, i_g_d, i_g_q) = x
 
     # grid angle
     dtheta_g = wg
 
     # grid voltage
-    v_d = V * cos(theta_g - theta_g) / V_base
-    v_q = V * sin(theta_g - theta_g) / V_base
+    v_g_d = V * cos(theta_g - theta_g) / V_base
+    v_g_q = V * sin(theta_g - theta_g) / V_base
 
     # reference currents
-    i_d_ref = (P_ref * v_d + Q_ref * v_q) / (v_d**2 + v_q**2)
-    i_q_ref = (P_ref * v_q - Q_ref * v_d) / (v_d**2 + v_q**2)
+    i_d_ref = (P_ref * v_g_d + Q_ref * v_g_q) / (v_g_d**2 + v_g_q**2)
+    i_q_ref = (P_ref * v_g_q - Q_ref * v_g_d) / (v_g_d**2 + v_g_q**2)
 
     # current control error
     e_id = i_d_ref - i_d
     e_iq = i_q_ref - i_q
 
+    # output voltage
+    v_o_d = v_c_d + R0 * (i_d - i_g_d)
+    v_o_q = v_c_q + R0 * (i_q - i_g_q)
+
     # terminal voltage
-    vt_d = z_d + (e_id * kp) - (XL_base * (dtheta_g/w_base) * i_q) + v_d
-    vt_q = z_q + (e_iq * kp) + (XL_base * (dtheta_g/w_base) * i_d) + v_q
+    # vt_d = z_d + (e_id * kp) - (XL_base * (dtheta_g/w_base) * i_q) + v_g_d
+    # vt_q = z_q + (e_iq * kp) + (XL_base * (dtheta_g/w_base) * i_d) + v_g_q
+    vt_d = z_d + (e_id * kp) + (XL_base * (dtheta_g/w_base) * i_q) + v_o_d
+    vt_q = z_q + (e_iq * kp) - (XL_base * (dtheta_g/w_base) * i_d) + v_o_q
 
     # change in currents and current controller states
-    di_d = (w_base / XL_base) * (vt_d - (i_d * R) - v_d + (XL_base * (dtheta_g/w_base) * i_q))
-    di_q = (w_base / XL_base) * (vt_q - (i_q * R) - v_q - (XL_base * (dtheta_g/w_base) * i_d))
-    dz_d = w_base * ki * e_id
+    # di_d = (w_base / XL_base) * (vt_d - (i_d * R) - v_g_d + (XL_base * (dtheta_g/w_base) * i_q))
+    # di_q = (w_base / XL_base) * (vt_q - (i_q * R) - v_g_q - (XL_base * (dtheta_g/w_base) * i_d))
+    di_d = (w_base / XL_base) * (vt_d - ((i_d * R) + (XL_base * (dtheta_g/w_base) * i_q) + v_o_d))
+    di_q = (w_base / XL_base) * (vt_q - ((i_q * R) - (XL_base * (dtheta_g/w_base) * i_d) + v_o_q))
+    dz_d = w_base * ki * e_id 
     dz_q = w_base * ki * e_iq
 
     # change in LCL cap voltage
-    # TODO: solve for grid current i_g_d and i_g_q
-    # i_g_dq = i_dq - (C0 * dv_c_d)
-    dv_c_d = 0.0 #(w_base / B0) * (i_d - i_g_d + dtheta_g * B0 * v_c_q)
-    dv_c_q = 0.0 #(w_base / B0) * (i_q - i_g_q - dtheta_g * B0 * v_c_d)
+    dv_c_d = (w_base / B0) * (i_d - i_g_d + (B0 * (wg/w_base) * v_c_q))
+    dv_c_q = (w_base / B0) * (i_q - i_g_q - (B0 * (wg/w_base) * v_c_d))
 
-    return (dtheta_g, di_d, di_q, dz_d, dz_q, dv_c_d, dv_c_q)
+    di_g_d = (w_base / XL_base) * (v_o_d - ((i_g_d * R) + (XL_base * (dtheta_g/w_base) * i_g_q) + v_g_d))
+    di_g_q = (w_base / XL_base) * (v_o_q - ((i_g_q * R) - (XL_base * (dtheta_g/w_base) * i_g_d) + v_g_q))
+
+    return (dtheta_g, di_d, di_q, dz_d, dz_q, dv_c_d, dv_c_q, di_g_d, di_g_q)
