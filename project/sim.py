@@ -18,22 +18,23 @@ tspan3 = [15*Tg, 20*Tg]
 
 # initial values
 # thetag, id, iq, zd, zq, vcd, vcq, igd, igq
-x0 = 0, 1.41, 0, 1.25, 0, 1.96, -0.15, 1.4, -.05
+x0 = 3.14159265e+01, 1.41421356e+00, 0.00000000e+00, 2.14832789e-02, 0.00000000e+00, 3.89241188e-01, -3.54671089e-01, 1.26684478e+00, -1.62349027e-01
 
 # simulate!
-results0 = solve_ivp(lambda t, x: xdot(t, x, V, kp, ki, R, B0, R0, wg, V_base, XL_base, w_base, 1e6/S_base, 0/S_base), tspan0, x0, max_step=tstep)
+results0 = solve_ivp(lambda t, x: xdot(t, x, V, kp, ki, R, Rg, B0, R0, wg, V_base, XL, XLg, w_base, 1e6/S_base, 0/S_base), tspan0, x0, max_step=tstep)
 y0 = results0.y
 
 x1 = y0[:,y0.shape[1]-1]
-results1 = solve_ivp(lambda t, x: xdot(t, x, V, kp, ki, R, B0, R0, wg, V_base, XL_base, w_base, 0.5e6/S_base, 0/S_base), tspan1, x1, max_step=tstep)
+print(x1)
+results1 = solve_ivp(lambda t, x: xdot(t, x, V, kp, ki, R, Rg, B0, R0, wg, V_base, XL, XLg, w_base, 0.5e6/S_base, 0/S_base), tspan1, x1, max_step=tstep)
 y1 = results1.y
 
 x2 = y1[:,y1.shape[1]-1]
-results2 = solve_ivp(lambda t, x: xdot(t, x, V, kp, ki, R, B0, R0, wg, V_base, XL_base, w_base, 0.5e6/S_base, 200e3/S_base), tspan2, x2, max_step=tstep)
+results2 = solve_ivp(lambda t, x: xdot(t, x, V, kp, ki, R, Rg, B0, R0, wg, V_base, XL, XLg, w_base, 0.5e6/S_base, 200e3/S_base), tspan2, x2, max_step=tstep)
 y2 = results2.y
 
 x3 = y2[:,y2.shape[1]-1]
-results3 = solve_ivp(lambda t, x: xdot(t, x, V, kp, ki, R, B0, R0, wg, V_base, XL_base, w_base, 0.25e6/S_base, 200e3/S_base), tspan3, x3, max_step=tstep)
+results3 = solve_ivp(lambda t, x: xdot(t, x, V, kp, ki, R, Rg, B0, R0, wg, V_base, XL, XLg, w_base, 0.25e6/S_base, 200e3/S_base), tspan3, x3, max_step=tstep)
 y3 = results3.y
 
 # concatenate results

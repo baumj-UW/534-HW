@@ -1,6 +1,6 @@
 from numpy import cos, sin
 
-def xdot(t, x, V, kp, ki, R, B0, R0, wg, V_base, XL_base, w_base, P_ref, Q_ref):
+def xdot(t, x, V, kp, ki, R, Rg, B0, R0, wg, V_base, XL, XLg, w_base, P_ref, Q_ref):
     """
     returns change in state dynamics.
     x representst system state, where x = (theta_g, i_d, i_q, z_d, z_q, v_c_d, v_c_q)
@@ -15,7 +15,7 @@ def xdot(t, x, V, kp, ki, R, B0, R0, wg, V_base, XL_base, w_base, P_ref, Q_ref):
         R {float} -- per unit resistance of RL branch
         B0 {float} -- per unit susceptance of LCL cap
         V_base {float} -- voltage base for per-unitization
-        XL_base {float} -- reactance base for inductive impedance per-unitization
+        XL {float} -- reactance base for inductive impedance per-unitization
         w_base {float} -- frequency base for per-unitization
         P_ref {float} -- input real power reference
         Q_ref {float} -- input reactive power reference
@@ -47,16 +47,16 @@ def xdot(t, x, V, kp, ki, R, B0, R0, wg, V_base, XL_base, w_base, P_ref, Q_ref):
     v_o_q = v_c_q + R0 * (i_q - i_g_q)
 
     # terminal voltage
-    # vt_d = z_d + (e_id * kp) - (XL_base * (dtheta_g/w_base) * i_q) + v_g_d
-    # vt_q = z_q + (e_iq * kp) + (XL_base * (dtheta_g/w_base) * i_d) + v_g_q
-    vt_d = z_d + (e_id * kp) + (XL_base * (dtheta_g/w_base) * i_q) + v_o_d
-    vt_q = z_q + (e_iq * kp) - (XL_base * (dtheta_g/w_base) * i_d) + v_o_q
+    # vt_d = z_d + (e_id * kp) - (XL * (dtheta_g/w_base) * i_q) + v_g_d
+    # vt_q = z_q + (e_iq * kp) + (XL * (dtheta_g/w_base) * i_d) + v_g_q
+    vt_d = z_d + (e_id * kp) + (XL * (dtheta_g/w_base) * i_q) + v_o_d
+    vt_q = z_q + (e_iq * kp) - (XL * (dtheta_g/w_base) * i_d) + v_o_q
 
     # change in currents and current controller states
-    # di_d = (w_base / XL_base) * (vt_d - (i_d * R) - v_g_d + (XL_base * (dtheta_g/w_base) * i_q))
-    # di_q = (w_base / XL_base) * (vt_q - (i_q * R) - v_g_q - (XL_base * (dtheta_g/w_base) * i_d))
-    di_d = (w_base / XL_base) * (vt_d - ((i_d * R) + (XL_base * (dtheta_g/w_base) * i_q) + v_o_d))
-    di_q = (w_base / XL_base) * (vt_q - ((i_q * R) - (XL_base * (dtheta_g/w_base) * i_d) + v_o_q))
+    # di_d = (w_base / XL) * (vt_d - (i_d * R) - v_g_d + (XL * (dtheta_g/w_base) * i_q))
+    # di_q = (w_base / XL) * (vt_q - (i_q * R) - v_g_q - (XL * (dtheta_g/w_base) * i_d))
+    di_d = (w_base / XL) * (vt_d - ((i_d * R) + (XL * (dtheta_g/w_base) * i_q) + v_o_d))
+    di_q = (w_base / XL) * (vt_q - ((i_q * R) - (XL * (dtheta_g/w_base) * i_d) + v_o_q))
     dz_d = w_base * ki * e_id 
     dz_q = w_base * ki * e_iq
 
@@ -64,7 +64,7 @@ def xdot(t, x, V, kp, ki, R, B0, R0, wg, V_base, XL_base, w_base, P_ref, Q_ref):
     dv_c_d = (w_base / B0) * (i_d - i_g_d + (B0 * (wg/w_base) * v_c_q))
     dv_c_q = (w_base / B0) * (i_q - i_g_q - (B0 * (wg/w_base) * v_c_d))
 
-    di_g_d = (w_base / XL_base) * (v_o_d - ((i_g_d * R) + (XL_base * (dtheta_g/w_base) * i_g_q) + v_g_d))
-    di_g_q = (w_base / XL_base) * (v_o_q - ((i_g_q * R) - (XL_base * (dtheta_g/w_base) * i_g_d) + v_g_q))
+    di_g_d = (w_base / XLg) * (v_o_d - ((i_g_d * Rg) + (XLg * (dtheta_g/w_base) * i_g_q) + v_g_d))
+    di_g_q = (w_base / XLg) * (v_o_q - ((i_g_q * Rg) - (XLg * (dtheta_g/w_base) * i_g_d) + v_g_q))
 
     return (dtheta_g, di_d, di_q, dz_d, dz_q, dv_c_d, dv_c_q, di_g_d, di_g_q)
