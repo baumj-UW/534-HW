@@ -18,7 +18,7 @@ tspan3 = [15*Tg, 20*Tg]
 
 # initial values
 # thetag, id, iq, zd, zq, vcd, vcq, igd, igq
-x0 = 0, 1.6986e3/I_base, 0, 1.2740/V_base, 0, 0.707, -0.1, 1.6e3/I_base, 0
+x0 = 0, 1.41, 0, 1.25, 0, 1.96, -0.15, 1.4, -.05
 
 # simulate!
 results0 = solve_ivp(lambda t, x: xdot(t, x, V, kp, ki, R, B0, R0, wg, V_base, XL_base, w_base, 1e6/S_base, 0/S_base), tspan0, x0, max_step=tstep)
@@ -92,4 +92,7 @@ plt.ylabel('dq-Current (pu)')
 plt.legend(('i_g_d','i_g_q'))
 plt.title("Per Unit Grid Currents")
 
+# for i in range(0, 9):
+#     plt.figure(i)
+#     plt.plot(t,results[i])
 plt.show()
