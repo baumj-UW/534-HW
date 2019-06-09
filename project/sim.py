@@ -33,7 +33,7 @@ def sim(Pref, Qref):
 
     # initial values
     # thetag, id, iq, zd, zq, vcd, vcq, igd, igq
-    x0 = 3.14159265e+01, 1.41421356e+00, 0.0, 2.14832789e-02, 0.0, 3.89241188e-01, -3.54671089e-01, 1.26684478e+00, -1.62349027e-01
+    x0 = 0.0, 1.41421356e+00, 0.0, 2.14832789e-02, 0.0, 3.89241188e-01, -3.54671089e-01, 1.26684478e+00, -1.62349027e-01
 
     # simulate!
     results0 = solve_ivp(lambda t, x: xdot(t, x, V, kp, ki, R, Rg, B0, R0, wg, V_base, XL, XLg, w_base, Pref0, Qref0), tspan0, x0, max_step=tstep)
