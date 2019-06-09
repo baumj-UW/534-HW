@@ -3,6 +3,7 @@ from xdot import xdot
 
 import numpy as np
 from scipy.integrate import solve_ivp
+import time
 
 
 def sim(Pref, Qref):
@@ -19,6 +20,7 @@ def sim(Pref, Qref):
     """
 
     #unpack Pref and Qref
+    tstart = time.time()
     (Pref0, Pref1, Pref2, Pref3) = Pref
     (Qref0, Qref1, Qref2, Qref3) = Qref
 
@@ -56,7 +58,7 @@ def sim(Pref, Qref):
     states = list()
     for i in range(0,len(y0)):
         data = np.concatenate((y0[i], y1[i], y2[i], y3[i]))
-        states.append(data)
+        states.append(np.array(data))
     
     for i, angle in enumerate(states[0]):
         states[0][i] = np.mod(angle, 2*pi)
@@ -68,4 +70,7 @@ def sim(Pref, Qref):
         P.append((V / V_base) * states[7][i])
         Q.append((V / V_base) * states[8][i])
     
-    return (t, states, P, Q)
+    tfinal = time.time()
+    print(f'Elapsed: {(tfinal - tstart):.2f} seconds')
+    
+    return (t, states, np.array(P), np.array(Q))
