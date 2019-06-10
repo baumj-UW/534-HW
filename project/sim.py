@@ -25,7 +25,7 @@ def sim(Pref, Qref):
     (Qref0, Qref1, Qref2, Qref3) = Qref
 
     # maximum step size for ode solver
-    tstep = 5*Tg/50 #1e3
+    tstep = 5*Tg/1e3
 
     # time intervals
     tspan0 = [0, 5*Tg]
@@ -35,7 +35,11 @@ def sim(Pref, Qref):
 
     # initial values
     # thetag, id, iq, zd, zq, vcd, vcq, igd, igq
-    x0 = 0.0, 1.41421356e+00, 0.0, 2.14832789e-02, 0.0, 3.89241188e-01, -3.54671089e-01, 1.26684478e+00, -1.62349027e-01
+    if N == 32:
+        x0 = 0.0, 4.52548340e+01, 0.0, 2.14832789e-02, 0.0, 3.89240671e-01, -3.54670893e-01, 4.05298940e+01, -5.19168134e+00
+    else:
+        x0 = 0.0, 1.41421356e+00, 0.0, 2.14832789e-02, 0.0, 3.89241188e-01, -3.54671089e-01, 1.26684478e+00, -1.62349027e-01
+    
 
     # simulate!
     results0 = solve_ivp(lambda t, x: xdot(t, x, V, kp, ki, R, Rg, B0, R0, wg, V_base, XL, XLg, w_base, Pref0, Qref0), tspan0, x0, max_step=tstep)

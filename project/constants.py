@@ -1,5 +1,7 @@
 from numpy import pi, sqrt
 
+N = 32
+
 # general inverter parameters
 V = sqrt(2/3)*480
 fg = 60
@@ -14,6 +16,14 @@ Lg = 2e-6
 Rg = 0.0012
 C0 = 2.4e-3 # TODO: find reasonable numbers for output cap
 R0 = 1
+
+
+L = L / N
+R = R / N
+Lg = Lg / N
+Rg = Rg / N
+C0 = C0 * N
+R0 = R0 / N
 
 # current controller
 tau = 1e-3
@@ -35,7 +45,7 @@ kp = kp / Z_base
 # per unit LCL
 XL = w_base * L / (V / I)
 XLg = w_base * Lg / (V / I)
-R = R / Z_base
+R =  R / Z_base
 Rg = Rg / Z_base
 B0 = w_base * C0 * (V / I)
 R0 = R0 / Z_base
