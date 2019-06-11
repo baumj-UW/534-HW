@@ -94,7 +94,7 @@ plt.plot(t_plecs_scaled, data_plecs_scaled[0], label='i, PLECS Scaled Circuit Eq
 plt.plot(t_plecs_scaled, data_plecs_scaled[3], color='C3')
 plt.xlabel('Time (sec)')
 plt.ylabel('dq-Current (pu)')
-plt.legend(('Aggregate Model (Python)','Aggregate Circuit Equivalent (PLECS)', 'Scaled Model (Python)', 'Scaled Circuit Equivalent (PLECS)'))
+plt.legend()
 plt.xlim((0, 20/60))
 plt.title("Per Unit Currents")
 
